@@ -2,10 +2,8 @@ import bcrypt
 
 
 def hash_password(password: str) -> bytes:
-    if not isinstance(password, str):
-        raise TypeError("Password must be a string")
-
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode(), salt)
 
 
 def verify_password(password: str, hashed: bytes) -> bool:

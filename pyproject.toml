@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "secure-auth"
+version = "0.1.0"
+description = "Secure password hashing and validation utilities"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "bcrypt>=5.0,<6",
+]
+
+[tool.setuptools]
+packages = ["auth"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

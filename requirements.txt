@@ -1,2 +1,2 @@
-bcrypt
-pytest
+bcrypt>=5.0,<6
+pytest>=8.0,<9

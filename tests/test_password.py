@@ -21,3 +21,12 @@ def test_password_validation():
     assert is_valid_password("alllowercase") is False
     assert is_valid_password("NOLOWER123!") is False
 
+
+def test_unicode_password():
+    pwd = "Sëcürê@123"
+    hashed = hash_password(pwd)
+    assert verify_password(pwd, hashed) is True
+
+
+def test_empty_password_invalid():
+    assert is_valid_password("") is False
