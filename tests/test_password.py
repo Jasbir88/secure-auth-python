@@ -30,3 +30,9 @@ def test_unicode_password():
 
 def test_empty_password_invalid():
     assert is_valid_password("") is False
+
+
+def test_blacklisted_passwords():
+    assert is_valid_password("password") is False
+    assert is_valid_password("Password123") is False
+    assert is_valid_password("admin123") is False
