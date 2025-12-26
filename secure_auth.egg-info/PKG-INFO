@@ -1,7 +1,0 @@
-Metadata-Version: 2.4
-Name: secure-auth
-Version: 0.1.0
-Summary: Secure password hashing and validation utilities
-Requires-Python: >=3.11
-Description-Content-Type: text/markdown
-Requires-Dist: bcrypt<6,>=5.0
