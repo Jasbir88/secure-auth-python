@@ -5,7 +5,7 @@ from auth.validator import is_valid_password
 def test_password_hashing():
     pwd = "Secure@123"
     hashed = hash_password(pwd)
-    assert pwd.encode() != hashed
+    assert pwd != hashed
 
 
 def test_password_verification():
