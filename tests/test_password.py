@@ -1,5 +1,5 @@
-from ..auth.password import hash_password, verify_password
-from ..auth.validator import is_valid_password
+from auth.password import hash_password, verify_password
+from auth.validator import is_valid_password
 
 
 def test_password_hashing():
