@@ -1,19 +1,41 @@
-# Python bytecode
+# Python
 __pycache__/
 *.py[cod]
-
-# Packaging artifacts
-*.egg-info/
-dist/
+*$py.class
+*.so
+.Python
 build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
 
 # Virtual environments
-.venv/
 venv/
+env/
+.venv/
 
-# OS files
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+*.local
+
+# Docker
+postgres_data/
+redis_data/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Misc
+*.log
 .DS_Store
 Thumbs.db
-
-# Pytest
-.pytest_cache/
