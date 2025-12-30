@@ -1,3 +1,4 @@
+HEAD
 aiosqlite==0.22.1
 alembic==1.17.2
 annotated-doc==0.0.4
@@ -98,3 +99,30 @@ tzdata==2025.2
 urllib3==2.3.0
 uvicorn==0.40.0
 virtualenv==20.34.0
+
+# FastAPI Auth Service
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+sqlalchemy>=2.0.25
+psycopg2-binary>=2.9.9
+redis>=5.0.1
+fastapi-limiter>=0.1.6
+python-jose[cryptography]>=3.3.0
+pydantic[email]>=2.5.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+alembic>=1.13.0
+
+# Auth (Argon2 hashing)
+argon2-cffi>=23.1.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+httpx>=0.26.0
+
+# Development
+black>=24.1.0
+ruff>=0.1.14
+fa6c53d (fix: Pydantic v2 migration and dependency cleanup)
