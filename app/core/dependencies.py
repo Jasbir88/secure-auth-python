@@ -44,6 +44,7 @@ async def get_current_user(
 
         jti: str = payload.get("jti")
         user_id: str = payload.get("sub")
+        token_version: int = payload.get("token_version")
 
         if user_id is None or jti is None:
             raise credentials_exception
@@ -59,6 +60,10 @@ async def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
+
+    # Check token version (logout-all-devices support)
+    if token_version is not None and user.token_version != token_version:
+        raise revoked_exception
 
     return user
 
