@@ -17,6 +17,10 @@ COPY app ./app
 COPY auth ./auth
 COPY tests ./tests
 
+# Alembic migrations
+COPY alembic ./alembic
+COPY alembic.ini .
+
 EXPOSE 3000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000"]

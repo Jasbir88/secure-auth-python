@@ -14,21 +14,22 @@ from app.core.config import settings
 from auth.password import hash_password, verify_password
 
 
-def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
+def create_access_token(subject: str, token_version: int = 1, expires_delta: timedelta | None = None) -> str:
     """Create a new JWT access token with JTI for revocation support."""
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     payload = {
         "sub": subject,
         "exp": expire,
         "iat": datetime.utcnow(),
         "jti": str(uuid.uuid4()),  # Unique token ID for blacklisting
         "type": "access",
+        "token_version": token_version,  # For logout-all-devices
     }
-    
+
     return jwt.encode(
         payload,
         settings.JWT_SECRET_KEY,

@@ -3,6 +3,8 @@ Authentication routes.
 """
 from datetime import datetime, timedelta
 
+from app.core.dependencies import get_current_user
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi_limiter.depends import RateLimiter
@@ -54,7 +56,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    access_token = create_access_token(str(user.id))
+    access_token = create_access_token(str(user.id), user.token_version)
     refresh_token_value = create_refresh_token()
 
     db.add(
@@ -93,7 +95,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Account is deactivated",
         )
 
-    access_token = create_access_token(str(user.id))
+    access_token = create_access_token(str(user.id), user.token_version)
     refresh_token_value = create_refresh_token()
 
     db.add(
@@ -140,7 +142,8 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 
     token.revoked = True
 
-    new_access = create_access_token(str(token.user_id))
+    user = db.query(User).filter(User.id == token.user_id).first()
+    new_access = create_access_token(str(token.user_id), user.token_version)
     new_refresh = create_refresh_token()
 
     db.add(
@@ -196,3 +199,26 @@ async def logout(
         pass  # Token invalid but still revoke refresh token
 
     return {"message": "Successfully logged out"}
+
+
+@router.post(
+    "/logout-all",
+    dependencies=[Depends(RateLimiter(times=5, seconds=60))]
+)
+async def logout_all_devices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Logout from all devices by incrementing token_version."""
+    # Increment token version - invalidates all existing tokens
+    current_user.token_version += 1
+    
+    # Also revoke all refresh tokens
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == current_user.id,
+        RefreshToken.revoked == False
+    ).update({"revoked": True})
+    
+    db.commit()
+    
+    return {"message": "All sessions invalidated"}

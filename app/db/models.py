@@ -4,7 +4,7 @@ Database models.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Boolean, DateTime, ForeignKey
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
     )
+    token_version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Relationship to refresh tokens
     refresh_tokens = relationship("RefreshToken", back_populates="user")
