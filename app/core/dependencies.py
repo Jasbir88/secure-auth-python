@@ -1,87 +1,77 @@
 """
-Authentication dependencies for protected routes.
+Authentication dependencies.
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from uuid import UUID
 
-from app.core.security import decode_access_token
+from app.core.config import settings
+from app.core.token_blacklist import token_blacklist
 from app.db.session import get_db
 from app.db.models import User
 
-# Security scheme for Swagger UI
 security = HTTPBearer()
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ) -> User:
     """
-    Dependency to get the current authenticated user from JWT.
-    Use this to protect routes that require authentication.
+    Validate access token and check blacklist before returning user.
     """
     token = credentials.credentials
-    
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    revoked_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Token has been revoked",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
     try:
-        payload = decode_access_token(token)
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+
+        jti: str = payload.get("jti")
         user_id: str = payload.get("sub")
-        
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: missing subject",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-            
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
+
+        if user_id is None or jti is None:
+            raise credentials_exception
+
+        # Check if token is blacklisted
+        if await token_blacklist.is_blacklisted(jti):
+            raise revoked_exception
+
+    except JWTError:
+        raise credentials_exception
+
     # Fetch user from database
-    user = db.query(User).filter(User.id == UUID(user_id)).first()
-    
+    user = db.query(User).filter(User.id == user_id).first()
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated",
-        )
-    
+        raise credentials_exception
+
     return user
 
 
-async def get_current_user_optional(
-    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
-    db: Session = Depends(get_db),
-) -> User | None:
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
     """
-    Optional authentication - returns None if no valid token.
-    Use for routes that work differently for authenticated vs anonymous users.
+    Ensure user is active.
     """
-    if credentials is None:
-        return None
-    
-    try:
-        payload = decode_access_token(credentials.credentials)
-        user_id: str = payload.get("sub")
-        
-        if user_id:
-            user = db.query(User).filter(User.id == UUID(user_id)).first()
-            if user and user.is_active:
-                return user
-    except JWTError:
-        pass
-    
-    return None
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user"
+        )
+    return current_user

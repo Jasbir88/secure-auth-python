@@ -3,10 +3,12 @@ Authentication routes.
 """
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
+from jose import jwt, JWTError
 
 from app.db.models import User, RefreshToken
 from app.db.session import get_db
@@ -26,6 +28,7 @@ from app.core.security import (
 from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+security = HTTPBearer()
 
 
 @router.post(
@@ -77,19 +80,19 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     """Login with email and password."""
     user = db.query(User).filter(User.email == payload.email).first()
-    
+
     if not user or not verify_user_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated",
         )
-    
+
     access_token = create_access_token(str(user.id))
     refresh_token_value = create_refresh_token()
 
@@ -159,13 +162,37 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     "/logout",
     dependencies=[Depends(RateLimiter(times=10, seconds=60))]
 )
-def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
-    """Logout - revoke refresh token."""
+async def logout(
+    request: Request,
+    payload: RefreshRequest,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """Logout - revoke refresh token AND blacklist access token."""
+    # 1. Revoke refresh token
     hashed = hash_refresh_token(payload.refresh_token)
-    token = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed).first()
-    
-    if token:
-        token.revoked = True
+    db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed).first()
+
+    if db_token:
+        db_token.revoked = True
         db.commit()
-    
+
+    # 2. Blacklist access token
+    access_token = credentials.credentials
+    try:
+        token_payload = jwt.decode(
+            access_token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        jti = token_payload.get("jti")
+        exp = token_payload.get("exp")
+
+        if jti and exp:
+            # Use the token_blacklist from app.state
+            await request.app.state.token_blacklist.add(jti, exp)
+
+    except JWTError:
+        pass  # Token invalid but still revoke refresh token
+
     return {"message": "Successfully logged out"}

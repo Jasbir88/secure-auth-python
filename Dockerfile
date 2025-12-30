@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App code
 COPY app ./app
 COPY auth ./auth
+COPY tests ./tests
 
 EXPOSE 3000
 
