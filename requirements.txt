@@ -125,4 +125,4 @@ httpx>=0.26.0
 # Development
 black>=24.1.0
 ruff>=0.1.14
-fa6c53d (fix: Pydantic v2 migration and dependency cleanup)
+
