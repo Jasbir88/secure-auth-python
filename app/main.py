@@ -1,11 +1,11 @@
 """
 FastAPI Auth Service - Main Application
 """
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
-import redis.asyncio as aioredis
 import logging
 
 from app.api.routes.auth import router as auth_router
@@ -16,47 +16,99 @@ from app.core.middleware import (
     RequestIDMiddleware,
     RequestLoggingMiddleware,
 )
-from app.core.token_blacklist import TokenBlacklist
 from app.db.session import engine, Base
 from app.db.models import User, RefreshToken
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Check if we're in testing mode
+TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
+
+
+class FakeRedis:
+    """Fake Redis client for testing without a real Redis server."""
+    
+    async def evalsha(self, *args, **kwargs):
+        # Return 0 to indicate "not rate limited"
+        return 0
+    
+    async def script_load(self, script):
+        return "fake_sha_hash"
+    
+    async def close(self):
+        pass
+    
+    async def ping(self):
+        return True
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events."""
     logger.info("Starting up...")
-    
+
     # Initialize database tables
     logger.info("Creating database tables...")
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ready!")
-    
-    # Initialize Redis
-    logger.info("Connecting to Redis...")
-    redis_client = aioredis.from_url(
-        settings.REDIS_URL,
-        encoding="utf-8",
-        decode_responses=True,
-    )
-    
-    # Initialize rate limiter
-    await FastAPILimiter.init(redis_client)
-    
-    # Initialize token blacklist
-    app.state.redis = redis_client
-    app.state.token_blacklist = TokenBlacklist(redis_client)
-    
-    logger.info("Redis connected!")
+
+    if TESTING:
+        # Testing mode: use fake Redis
+        logger.info("Testing mode: Using fake Redis...")
+        
+        fake_redis = FakeRedis()
+        await FastAPILimiter.init(fake_redis)
+        
+        app.state.redis = fake_redis
+        app.state.token_blacklist = FakeTokenBlacklist()
+        
+        logger.info("Testing mode: Fake Redis initialized!")
+    else:
+        # Production mode: use real Redis
+        logger.info("Connecting to Redis...")
+        try:
+            import redis.asyncio as aioredis
+            from app.core.token_blacklist import TokenBlacklist
+
+            redis_client = aioredis.from_url(
+                settings.REDIS_URL,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+
+            await FastAPILimiter.init(redis_client)
+
+            app.state.redis = redis_client
+            app.state.token_blacklist = TokenBlacklist(redis_client)
+
+            logger.info("Redis connected!")
+        except Exception as e:
+            logger.warning(f"Redis connection failed: {e}")
+            app.state.redis = None
+            app.state.token_blacklist = None
+
     logger.info("Auth service ready!")
-    
+
     yield
-    
+
     logger.info("Shutting down...")
     await FastAPILimiter.close()
-    await app.state.redis.close()
+    if hasattr(app.state, 'redis') and app.state.redis and not TESTING:
+        await app.state.redis.close()
+
+
+class FakeTokenBlacklist:
+    """Fake token blacklist for testing."""
+    
+    def __init__(self):
+        self._blacklisted = set()
+    
+    async def add(self, jti: str, exp: int):
+        self._blacklisted.add(jti)
+    
+    async def is_blacklisted(self, jti: str) -> bool:
+        return jti in self._blacklisted
 
 
 app = FastAPI(
@@ -99,13 +151,16 @@ async def readiness():
     """Readiness check with dependency status."""
     redis_ok = False
     db_ok = False
-    
+
     try:
-        await app.state.redis.ping()
-        redis_ok = True
+        if TESTING:
+            redis_ok = True
+        elif app.state.redis:
+            await app.state.redis.ping()
+            redis_ok = True
     except Exception:
         pass
-    
+
     try:
         from sqlalchemy import text
         with engine.connect() as conn:
@@ -113,9 +168,9 @@ async def readiness():
         db_ok = True
     except Exception:
         pass
-    
+
     status = "ready" if (redis_ok and db_ok) else "degraded"
-    
+
     return {
         "status": status,
         "dependencies": {

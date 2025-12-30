@@ -1,7 +1,14 @@
 """
 Security utilities for authentication.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Instead of:
+datetime.utcnow()
+
+# Use:
+datetime.now(timezone.utc)
+
 import secrets
 import hashlib
 import uuid

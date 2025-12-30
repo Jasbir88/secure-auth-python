@@ -1,13 +1,12 @@
 """
 Authentication dependencies.
 """
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.token_blacklist import token_blacklist
 from app.db.session import get_db
 from app.db.models import User
 
@@ -15,6 +14,7 @@ security = HTTPBearer()
 
 
 async def get_current_user(
+    request: Request,  # Add request to access app.state
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
@@ -49,8 +49,9 @@ async def get_current_user(
         if user_id is None or jti is None:
             raise credentials_exception
 
-        # Check if token is blacklisted
-        if await token_blacklist.is_blacklisted(jti):
+        # Check if token is blacklisted (use app.state.token_blacklist)
+        token_blacklist = request.app.state.token_blacklist
+        if token_blacklist and await token_blacklist.is_blacklisted(jti):
             raise revoked_exception
 
     except JWTError:

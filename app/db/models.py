@@ -2,13 +2,19 @@
 Database models.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# Instead of:
+datetime.utcnow()
+
+# Use:
+datetime.now(timezone.utc)
 
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
+from app.db.types import GUID  # Import the new type
 
 
 class User(Base):
@@ -16,7 +22,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        GUID(), primary_key=True, default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String)
@@ -35,10 +41,10 @@ class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        GUID(), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+        GUID(), ForeignKey("users.id", ondelete="CASCADE")
     )
     token_hash: Mapped[str] = mapped_column(String, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime)

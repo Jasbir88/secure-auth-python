@@ -1,7 +1,13 @@
 """
 Authentication routes.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Instead of:
+datetime.utcnow()
+
+# Use:
+datetime.now(timezone.utc)
 
 from app.core.dependencies import get_current_user
 

@@ -17,9 +17,14 @@ dependencies = [
 packages = ["auth"]
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]
-asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
 asyncio_default_fixture_loop_scope = "function"
+addopts = "-v --tb=short"
 
 [tool.setuptools.package-data]
 auth = ["password_blacklist.txt"]
