@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 class GUID(TypeDecorator):
     """Platform-independent GUID type.
-    
+
     Uses PostgreSQL's UUID type when available, otherwise uses String(36).
     """
     impl = String(36)

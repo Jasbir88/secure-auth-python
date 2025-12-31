@@ -16,7 +16,7 @@ from app.schemas.user import (
     ChangePasswordRequest,
 )
 
-router = APIRouter(prefix="/api/users", tags=["Users"])
+router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get(
@@ -56,10 +56,10 @@ async def update_profile(
                 detail="Email already in use",
             )
         current_user.email = payload.email
-    
+
     db.commit()
     db.refresh(current_user)
-    
+
     return current_user
 
 
@@ -82,11 +82,11 @@ async def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
-    
+
     # Update password
     current_user.password_hash = hash_user_password(payload.new_password)
     db.commit()
-    
+
     return {"message": "Password changed successfully"}
 
 
@@ -104,5 +104,5 @@ async def delete_account(
     """
     current_user.is_active = False
     db.commit()
-    
+
     return {"message": "Account deactivated successfully"}

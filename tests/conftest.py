@@ -38,7 +38,7 @@ if IS_SQLITE:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    
+
     # Enable foreign key support for SQLite
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -55,7 +55,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def db_session():
     """Creates a fresh database session for each test."""
     Base.metadata.create_all(bind=engine)
-    
+
     session = TestingSessionLocal()
     try:
         yield session
@@ -68,16 +68,16 @@ def db_session():
 def client(db_session):
     """Test client with database dependency override."""
     from fastapi.testclient import TestClient
-    
+
     def override_get_db():
         try:
             yield db_session
         finally:
             pass
-    
+
     app.dependency_overrides[get_db] = override_get_db
-    
+
     with TestClient(app) as test_client:
         yield test_client
-    
+
     app.dependency_overrides.clear()

@@ -1,18 +1,27 @@
 # Secure Auth Python
 
-![Tests](https://github.com/Jasbir88/secure-auth-python/actions/workflows/test.yml/badge.svg)
-![Python](https://img.shields.io/badge/python-3.12-blue)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green)
-![License](https://img.shields.io/badge/license-MIT-blue)
+A secure authentication service built with FastAPI.
 
 ## Features
-- ✅ User registration & login
-- ✅ JWT authentication
-- ✅ Logout all devices (token versioning)
-- ✅ Password hashing (Argon2)
+
+- ✅ JWT authentication with access/refresh tokens
+- ✅ Password hashing with Argon2
+- ✅ Token blacklisting with Redis
 - ✅ Rate limiting
-- ✅ Redis token blacklist
+- ✅ Logout from all devices
 
 ## Quick Start
-...
 
+```bash
+# Clone
+git clone https://github.com/Jasbir88/secure-auth-python.git
+cd secure-auth-python
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run tests (no Docker needed!)
+pytest -v
+
+# Run with Docker
+docker-compose up -d

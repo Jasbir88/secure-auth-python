@@ -44,3 +44,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 Dockerfile.backup
+__pycache__/
+*.pyc
+htmlcov/
+.coverage
+src/

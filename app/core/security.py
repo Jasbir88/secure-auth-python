@@ -1,17 +1,10 @@
 """
 Security utilities for authentication.
 """
-from datetime import datetime, timedelta, timezone
-
-# Instead of:
-datetime.utcnow()
-
-# Use:
-datetime.now(timezone.utc)
-
 import secrets
 import hashlib
 import uuid
+from datetime import datetime, timezone, timedelta
 
 from jose import jwt, JWTError
 
@@ -24,17 +17,17 @@ from auth.password import hash_password, verify_password
 def create_access_token(subject: str, token_version: int = 1, expires_delta: timedelta | None = None) -> str:
     """Create a new JWT access token with JTI for revocation support."""
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
         "sub": subject,
         "exp": expire,
-        "iat": datetime.utcnow(),
-        "jti": str(uuid.uuid4()),  # Unique token ID for blacklisting
+        "iat": datetime.now(timezone.utc),
+        "jti": str(uuid.uuid4()),
         "type": "access",
-        "token_version": token_version,  # For logout-all-devices
+        "token_version": token_version,
     }
 
     return jwt.encode(

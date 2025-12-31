@@ -2,19 +2,18 @@
 Database models.
 """
 import uuid
-from datetime import datetime, timedelta, timezone
-
-# Instead of:
-datetime.utcnow()
-
-# Use:
-datetime.now(timezone.utc)
+from datetime import datetime, timezone
 
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.db.types import GUID  # Import the new type
+from app.db.types import GUID
+
+
+def utc_now_naive() -> datetime:
+    """Return current UTC time as naive datetime for DB compatibility."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class User(Base):
@@ -28,7 +27,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow
+        DateTime, default=utc_now_naive
     )
     token_version: Mapped[int] = mapped_column(Integer, default=1)
 
@@ -50,7 +49,7 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow
+        DateTime, default=utc_now_naive
     )
 
     # Relationship back to user

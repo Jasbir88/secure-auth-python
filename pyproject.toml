@@ -8,7 +8,6 @@ version = "0.1.0"
 description = "Secure password hashing and validation utilities"
 readme = "README.md"
 requires-python = ">=3.11"
-
 dependencies = [
     "argon2-cffi>=23.1.0",
 ]
@@ -16,15 +15,50 @@ dependencies = [
 [tool.setuptools]
 packages = ["auth"]
 
+[tool.setuptools.package-data]
+auth = ["password_blacklist.txt"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-markers = [
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-]
+asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "-v --tb=short"
+minversion = "7.0"
+addopts = "-v --tb=short -ra"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
 
-[tool.setuptools.package-data]
-auth = ["password_blacklist.txt"]
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = [
+    "app/__init__.py",
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+fail_under = 0
+show_missing = true
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["app"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

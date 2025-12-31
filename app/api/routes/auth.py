@@ -1,15 +1,7 @@
 """
 Authentication routes.
 """
-from datetime import datetime, timedelta, timezone
-
-# Instead of:
-datetime.utcnow()
-
-# Use:
-datetime.now(timezone.utc)
-
-from app.core.dependencies import get_current_user
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -18,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from jose import jwt, JWTError
 
+from app.core.dependencies import get_current_user
 from app.db.models import User, RefreshToken
 from app.db.session import get_db
 from app.schemas.auth import (
@@ -69,7 +62,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         RefreshToken(
             user_id=user.id,
             token_hash=hash_refresh_token(refresh_token_value),
-            expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
     )
     db.commit()
@@ -108,7 +101,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         RefreshToken(
             user_id=user.id,
             token_hash=hash_refresh_token(refresh_token_value),
-            expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
     )
     db.commit()
@@ -134,7 +127,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
             and_(
                 RefreshToken.token_hash == hashed,
                 RefreshToken.revoked == False,
-                RefreshToken.expires_at > datetime.utcnow(),
+                RefreshToken.expires_at > datetime.now(timezone.utc),
             )
         )
         .first()
@@ -156,7 +149,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         RefreshToken(
             user_id=token.user_id,
             token_hash=hash_refresh_token(new_refresh),
-            expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
     )
     db.commit()
@@ -178,7 +171,6 @@ async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     """Logout - revoke refresh token AND blacklist access token."""
-    # 1. Revoke refresh token
     hashed = hash_refresh_token(payload.refresh_token)
     db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed).first()
 
@@ -186,7 +178,6 @@ async def logout(
         db_token.revoked = True
         db.commit()
 
-    # 2. Blacklist access token
     access_token = credentials.credentials
     try:
         token_payload = jwt.decode(
@@ -198,11 +189,10 @@ async def logout(
         exp = token_payload.get("exp")
 
         if jti and exp:
-            # Use the token_blacklist from app.state
             await request.app.state.token_blacklist.add(jti, exp)
 
     except JWTError:
-        pass  # Token invalid but still revoke refresh token
+        pass
 
     return {"message": "Successfully logged out"}
 
@@ -216,15 +206,13 @@ async def logout_all_devices(
     current_user: User = Depends(get_current_user),
 ):
     """Logout from all devices by incrementing token_version."""
-    # Increment token version - invalidates all existing tokens
     current_user.token_version += 1
-    
-    # Also revoke all refresh tokens
+
     db.query(RefreshToken).filter(
         RefreshToken.user_id == current_user.id,
         RefreshToken.revoked == False
     ).update({"revoked": True})
-    
+
     db.commit()
-    
+
     return {"message": "All sessions invalidated"}
