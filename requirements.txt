@@ -8,7 +8,7 @@ fastapi-limiter>=0.1.6
 python-jose[cryptography]>=3.3.0
 pydantic[email]>=2.5.0
 pydantic-settings>=2.1.0
-python-multipart>=0.0.6
+python-multipart>=0.0.18
 alembic>=1.13.0
 
 # Auth (Argon2 hashing)
@@ -23,3 +23,5 @@ httpx>=0.26.0
 # Development
 black>=24.1.0
 ruff>=0.1.14
+pyasn1>=0.6.2 # not directly required, pinned by Snyk to avoid a vulnerability
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
