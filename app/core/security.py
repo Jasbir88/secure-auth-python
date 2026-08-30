@@ -1,12 +1,14 @@
 """
 Security utilities for authentication.
 """
-import secrets
-import hashlib
-import uuid
-from datetime import datetime, timezone, timedelta
 
-from jose import jwt, JWTError
+import hashlib
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
+
+import jwt
+from jwt.exceptions import PyJWTError
 
 from app.core.config import settings
 
@@ -14,12 +16,16 @@ from app.core.config import settings
 from auth.password import hash_password, verify_password
 
 
-def create_access_token(subject: str, token_version: int = 1, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    subject: str, token_version: int = 1, expires_delta: timedelta | None = None
+) -> str:
     """Create a new JWT access token with JTI for revocation support."""
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
 
     payload = {
         "sub": subject,
@@ -58,7 +64,7 @@ def get_token_payload(token: str) -> dict | None:
             algorithms=[settings.JWT_ALGORITHM],
             options={"verify_exp": False},
         )
-    except JWTError:
+    except PyJWTError:
         return None
 
 
