@@ -18,10 +18,11 @@ git clone https://github.com/Jasbir88/secure-auth-python.git
 cd secure-auth-python
 
 # Install dependencies
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # Run tests (no Docker needed!)
-pytest -v
+python -m pytest -q
 
 # Run with Docker
-docker-compose up -d
+docker compose up -d
+```

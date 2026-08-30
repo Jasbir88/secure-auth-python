@@ -1,32 +1,34 @@
 """
 Authentication routes.
 """
-from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from datetime import datetime, timedelta, timezone
+
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi_limiter.depends import RateLimiter
-from sqlalchemy.orm import Session
+from jwt.exceptions import PyJWTError
 from sqlalchemy import and_
-from jose import jwt, JWTError
+from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user
-from app.db.models import User, RefreshToken
-from app.db.session import get_db
-from app.schemas.auth import (
-    RegisterRequest,
-    LoginRequest,
-    RefreshRequest,
-    TokenResponse,
-)
 from app.core.security import (
     create_access_token,
     create_refresh_token,
+    hash_refresh_token,
     hash_user_password,
     verify_user_password,
-    hash_refresh_token,
 )
-from app.core.config import settings
+from app.db.models import RefreshToken, User
+from app.db.session import get_db
+from app.schemas.auth import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer()
@@ -36,7 +38,7 @@ security = HTTPBearer()
     "/register",
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RateLimiter(times=5, seconds=60))]
+    dependencies=[Depends(RateLimiter(times=5, seconds=60))],
 )
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     """Register a new user."""
@@ -62,7 +64,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         RefreshToken(
             user_id=user.id,
             token_hash=hash_refresh_token(refresh_token_value),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
     )
     db.commit()
@@ -76,7 +79,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 @router.post(
     "/login",
     response_model=TokenResponse,
-    dependencies=[Depends(RateLimiter(times=5, seconds=60))]
+    dependencies=[Depends(RateLimiter(times=5, seconds=60))],
 )
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     """Login with email and password."""
@@ -101,7 +104,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         RefreshToken(
             user_id=user.id,
             token_hash=hash_refresh_token(refresh_token_value),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
     )
     db.commit()
@@ -115,7 +119,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.post(
     "/refresh",
     response_model=TokenResponse,
-    dependencies=[Depends(RateLimiter(times=10, seconds=60))]
+    dependencies=[Depends(RateLimiter(times=10, seconds=60))],
 )
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     """Refresh access token using refresh token."""
@@ -126,7 +130,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         .filter(
             and_(
                 RefreshToken.token_hash == hashed,
-                RefreshToken.revoked == False,
+                RefreshToken.revoked.is_(False),
                 RefreshToken.expires_at > datetime.now(timezone.utc),
             )
         )
@@ -149,7 +153,8 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         RefreshToken(
             user_id=token.user_id,
             token_hash=hash_refresh_token(new_refresh),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         )
     )
     db.commit()
@@ -160,10 +165,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.post(
-    "/logout",
-    dependencies=[Depends(RateLimiter(times=10, seconds=60))]
-)
+@router.post("/logout", dependencies=[Depends(RateLimiter(times=10, seconds=60))])
 async def logout(
     request: Request,
     payload: RefreshRequest,
@@ -181,9 +183,7 @@ async def logout(
     access_token = credentials.credentials
     try:
         token_payload = jwt.decode(
-            access_token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM]
+            access_token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
         jti = token_payload.get("jti")
         exp = token_payload.get("exp")
@@ -191,16 +191,13 @@ async def logout(
         if jti and exp:
             await request.app.state.token_blacklist.add(jti, exp)
 
-    except JWTError:
+    except PyJWTError:
         pass
 
     return {"message": "Successfully logged out"}
 
 
-@router.post(
-    "/logout-all",
-    dependencies=[Depends(RateLimiter(times=5, seconds=60))]
-)
+@router.post("/logout-all", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def logout_all_devices(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -209,8 +206,7 @@ async def logout_all_devices(
     current_user.token_version += 1
 
     db.query(RefreshToken).filter(
-        RefreshToken.user_id == current_user.id,
-        RefreshToken.revoked == False
+        RefreshToken.user_id == current_user.id, RefreshToken.revoked.is_(False)
     ).update({"revoked": True})
 
     db.commit()

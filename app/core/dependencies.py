@@ -1,14 +1,16 @@
 """
 Authentication dependencies.
 """
-from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+
+import jwt
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.session import get_db
 from app.db.models import User
+from app.db.session import get_db
 
 security = HTTPBearer()
 
@@ -16,7 +18,7 @@ security = HTTPBearer()
 async def get_current_user(
     request: Request,  # Add request to access app.state
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> User:
     """
     Validate access token and check blacklist before returning user.
@@ -37,9 +39,7 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM]
+            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
 
         jti: str = payload.get("jti")
@@ -54,7 +54,7 @@ async def get_current_user(
         if token_blacklist and await token_blacklist.is_blacklisted(jti):
             raise revoked_exception
 
-    except JWTError:
+    except PyJWTError:
         raise credentials_exception
 
     # Fetch user from database
@@ -70,14 +70,13 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """
     Ensure user is active.
     """
     if not current_user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user"
         )
     return current_user
