@@ -23,6 +23,12 @@ python -m pip install -r requirements.txt
 # Run tests (no Docker needed!)
 python -m pytest -q
 
-# Run with Docker
-docker compose up -d
+# Check Docker's production JWT secret requirement (no containers started)
+python scripts/check_compose_security.py
 ```
+
+For Docker startup, first configure a random signing key using the
+[security hardening guide](docs/security-hardening.md). Compose requires a
+non-empty key, and the application rejects the public default or keys shorter
+than 32 UTF-8 bytes in production. The guide includes Windows/Git Bash commands,
+focused tests, and the access-token migration notes.

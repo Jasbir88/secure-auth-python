@@ -49,8 +49,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Check Compose JWT configuration
+        run: python scripts/check_compose_security.py
+
       - name: Run tests
         env:
+          ENVIRONMENT: test
           DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auth_db
           REDIS_URL: redis://localhost:6379/0
           JWT_SECRET_KEY: test-secret-key-for-ci-pipeline-min-32-chars
