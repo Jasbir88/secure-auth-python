@@ -2,13 +2,12 @@
 Authentication dependencies.
 """
 
-import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.security import decode_access_token
 from app.db.models import User
 from app.db.session import get_db
 
@@ -38,16 +37,11 @@ async def get_current_user(
     )
 
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = decode_access_token(token)
 
-        jti: str = payload.get("jti")
-        user_id: str = payload.get("sub")
-        token_version: int = payload.get("token_version")
-
-        if user_id is None or jti is None:
-            raise credentials_exception
+        jti: str = payload["jti"]
+        user_id: str = payload["sub"]
+        token_version: int = payload["token_version"]
 
         # Check if token is blacklisted (use app.state.token_blacklist)
         token_blacklist = request.app.state.token_blacklist
@@ -63,7 +57,7 @@ async def get_current_user(
         raise credentials_exception
 
     # Check token version (logout-all-devices support)
-    if token_version is not None and user.token_version != token_version:
+    if user.token_version != token_version:
         raise revoked_exception
 
     return user

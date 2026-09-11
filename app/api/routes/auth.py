@@ -4,19 +4,19 @@ Authentication routes.
 
 from datetime import datetime, timedelta, timezone
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi_limiter.depends import RateLimiter
-from jwt.exceptions import PyJWTError
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.security import (
+    DUMMY_PASSWORD_HASH,
     create_access_token,
     create_refresh_token,
+    get_token_payload,
     hash_refresh_token,
     hash_user_password,
     verify_user_password,
@@ -85,7 +85,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     """Login with email and password."""
     user = db.query(User).filter(User.email == payload.email).first()
 
-    if not user or not verify_user_password(payload.password, user.password_hash):
+    password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+    password_valid = verify_user_password(payload.password, password_hash)
+    if user is None or not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -181,18 +183,11 @@ async def logout(
         db.commit()
 
     access_token = credentials.credentials
-    try:
-        token_payload = jwt.decode(
-            access_token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+    token_payload = get_token_payload(access_token)
+    if token_payload is not None:
+        await request.app.state.token_blacklist.add(
+            token_payload["jti"], token_payload["exp"]
         )
-        jti = token_payload.get("jti")
-        exp = token_payload.get("exp")
-
-        if jti and exp:
-            await request.app.state.token_blacklist.add(jti, exp)
-
-    except PyJWTError:
-        pass
 
     return {"message": "Successfully logged out"}
 
