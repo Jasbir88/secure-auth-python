@@ -318,6 +318,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Verify runtime lock matches source requirements
+        run: python scripts/check_runtime_lock.py
+
       - name: Verify hash-locked production dependencies
         run: |
           python -m pip install             --require-hashes             -r requirements-runtime.lock
