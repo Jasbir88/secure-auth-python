@@ -58,13 +58,9 @@ echo "PostgreSQL backup: PASS"
 echo
 echo "=== REDIS BACKUP ==="
 
-"${COMPOSE[@]}" run \
-    --rm \
-    -T \
-    --no-deps \
-    -v "$ROOT_DIR/scripts/redis_snapshot.py:/tools/redis_snapshot.py:ro" \
-    app \
-    python /tools/redis_snapshot.py dump \
+"${COMPOSE[@]}" exec -T app \
+    python - dump \
+    < "$ROOT_DIR/scripts/redis_snapshot.py" \
     > "$BACKUP_DIR/redis.jsonl"
 
 touch "$BACKUP_DIR/redis.jsonl"
