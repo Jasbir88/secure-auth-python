@@ -1,0 +1,26 @@
+services:
+  db:
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  redis:
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  migrate:
+    restart: "no"
+
+  app:
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+volumes:
+  redis_data:

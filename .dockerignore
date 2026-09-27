@@ -34,3 +34,5 @@ docker-compose.yml
 
 scripts/test_compose_e2e.sh
 scripts/verify_all.sh
+
+backups

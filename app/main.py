@@ -11,6 +11,7 @@ from redis.exceptions import RedisError
 from app.api.routes.auth import router as auth_router
 from app.api.routes.users import router as users_router
 from app.core.config import settings
+from app.core.logging_config import configure_logging
 from app.core.redis_runtime import initialize_required_redis
 from app.core.middleware import (
     SecurityHeadersMiddleware,
@@ -20,7 +21,7 @@ from app.core.middleware import (
 from app.db.schema import verify_database_schema
 from app.db.session import engine
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Check if we're in testing mode
