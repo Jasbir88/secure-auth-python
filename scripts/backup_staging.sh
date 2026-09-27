@@ -6,6 +6,18 @@ cd "$ROOT_DIR"
 
 ENV_FILE=".env.staging"
 
+mkdir -p .release-state
+chmod 700 .release-state
+
+if [[ "${SECURE_AUTH_OPERATION_LOCK_HELD:-0}" != "1" ]]; then
+    exec 9>.release-state/staging-operation.lock
+
+    flock -n 9 || {
+        echo "ERROR: another staging deployment/backup operation is active."
+        exit 75
+    }
+fi
+
 [[ -f "$ENV_FILE" ]] || {
     echo "ERROR: $ENV_FILE is missing."
     exit 1

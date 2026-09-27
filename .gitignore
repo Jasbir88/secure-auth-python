@@ -56,3 +56,4 @@ src/
 
 .env.staging
 backups/
+.release-state/

@@ -40,7 +40,11 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    build: .
+    image: "${COMPOSE_PROJECT_NAME:-secure-auth}-app:${RELEASE_CHANNEL:-current}"
+    build:
+      context: .
+      args:
+        RELEASE_ID: ${RELEASE_ID:-development}
     cap_drop:
       - ALL
     security_opt:
@@ -69,7 +73,11 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    build: .
+    image: "${COMPOSE_PROJECT_NAME:-secure-auth}-app:${RELEASE_CHANNEL:-current}"
+    build:
+      context: .
+      args:
+        RELEASE_ID: ${RELEASE_ID:-development}
     cap_drop:
       - ALL
     security_opt:
