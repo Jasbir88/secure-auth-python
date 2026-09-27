@@ -1,7 +1,7 @@
 """add_token_version_to_users
 
 Revision ID: 5e3526e9e493
-Revises:
+Revises: 2b7c4e1a9d03
 Create Date: 2025-12-30 05:29:28.946015
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '5e3526e9e493'
-down_revision: Union[str, Sequence[str], None] = None
+down_revision: Union[str, Sequence[str], None] = "2b7c4e1a9d03"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

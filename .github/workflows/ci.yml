@@ -52,8 +52,26 @@ jobs:
       - name: Check Compose JWT configuration
         run: python scripts/check_compose_security.py
 
+      - name: Verify Alembic migrations
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auth_db
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET_KEY: test-secret-key-for-ci-pipeline-min-32-chars
+          JWT_ALGORITHM: HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES: 30
+          REFRESH_TOKEN_EXPIRE_DAYS: 7
+        run: |
+          python -m alembic upgrade head
+          python -m alembic check
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+          python -m alembic check
+
       - name: Run tests
         env:
+          TESTING: "1"
+          USE_DOCKER_DB: "1"
           ENVIRONMENT: test
           DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/auth_db
           REDIS_URL: redis://localhost:6379/0
