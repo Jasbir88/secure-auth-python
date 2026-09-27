@@ -3,6 +3,8 @@ Integration tests for complete auth flow.
 """
 import pytest
 
+from app.db.models import User
+
 
 class TestAuthFlow:
     """Test complete authentication workflows."""
@@ -34,6 +36,28 @@ class TestAuthFlow:
         assert response.status_code == 200
         new_tokens = response.json()
         assert new_tokens["access_token"] != tokens["access_token"]
+
+    def test_weak_registration_rejected_and_not_stored(
+        self, client, db_session
+    ):
+        """Weak registration passwords fail before user creation."""
+        email = "weak-password@example.com"
+        password = "short"
+
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": email,
+                "password": password,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json() == {"detail": "Invalid registration data"}
+        assert password not in response.text
+
+        stored_user = db_session.query(User).filter(User.email == email).first()
+        assert stored_user is None
 
     def test_invalid_login(self, client, db_session):
         """Test login with wrong credentials."""

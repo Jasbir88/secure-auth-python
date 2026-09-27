@@ -1,6 +1,9 @@
 import re
 from pathlib import Path
 
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 128
+
 _BLACKLIST_PATH = Path(__file__).with_name("password_blacklist.txt")
 
 
@@ -25,7 +28,7 @@ def is_valid_password(password: str) -> bool:
     if password.lower() in _PASSWORD_BLACKLIST:
         return False
 
-    if len(password) < 8:
+    if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
         return False
     if not re.search(r"[A-Z]", password):
         return False

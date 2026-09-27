@@ -22,6 +22,18 @@ def test_password_validation():
     assert is_valid_password("NOLOWER123!") is False
 
 
+def test_password_max_length_128_is_valid():
+    password = "Aa1!" + ("x" * 124)
+    assert len(password) == 128
+    assert is_valid_password(password) is True
+
+
+def test_password_over_max_length_129_is_invalid():
+    password = "Aa1!" + ("x" * 125)
+    assert len(password) == 129
+    assert is_valid_password(password) is False
+
+
 def test_unicode_password():
     pwd = "Sëcürê@123"
     hashed = hash_password(pwd)

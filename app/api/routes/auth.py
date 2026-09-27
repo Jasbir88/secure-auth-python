@@ -10,6 +10,8 @@ from fastapi_limiter.depends import RateLimiter
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
+from auth.validator import is_valid_password
+
 from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.security import (
@@ -42,6 +44,12 @@ security = HTTPBearer()
 )
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     """Register a new user."""
+    if not is_valid_password(payload.password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid registration data",
+        )
+
     existing_user = db.query(User).filter(User.email == payload.email).first()
     if existing_user:
         raise HTTPException(
