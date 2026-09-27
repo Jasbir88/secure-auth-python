@@ -4,7 +4,21 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-API_URL="${API_URL:-http://127.0.0.1:3000}"
+if [[ -z "${APP_PORT:-}" ]]; then
+    APP_PORT="$(
+        python3 - <<'PYPORT'
+import socket
+
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PYPORT
+    )"
+fi
+
+export APP_PORT
+
+API_URL="${API_URL:-http://127.0.0.1:${APP_PORT}}"
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-secure-auth-e2e-$$}"
 
@@ -113,12 +127,14 @@ pass "Dockerfile base images are digest-pinned"
 
 docker compose config --format json > "$TMP_DIR/compose.json"
 
-python3 - "$TMP_DIR/compose.json" <<'PY'
+python3 - "$TMP_DIR/compose.json" "$APP_PORT" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     config = json.load(handle)
+
+expected_app_port = str(sys.argv[2])
 
 services = config["services"]
 
@@ -202,14 +218,18 @@ port = app_ports[0]
 
 if (
     str(port.get("target")) != "3000"
-    or str(port.get("published")) != "3000"
+    or str(port.get("published")) != expected_app_port
     or port.get("host_ip") != "127.0.0.1"
 ):
     raise SystemExit(
-        f"app port is not restricted to 127.0.0.1:3000: {port}"
+        "app port is not restricted to "
+        f"127.0.0.1:{expected_app_port}: {port}"
     )
 
-print("PASS: Compose host exposure is restricted.")
+print(
+    "PASS: Compose host exposure is restricted "
+    f"to 127.0.0.1:{expected_app_port}."
+)
 
 for service_name in ("app", "migrate"):
     service = services[service_name]

@@ -32,3 +32,9 @@ For Docker startup, first configure a random signing key using the
 non-empty key, and the application rejects the public default or keys shorter
 than 32 UTF-8 bytes in production. The guide includes Windows/Git Bash commands,
 focused tests, and the access-token migration notes.
+
+## Staging Operations
+
+Private staging deployment, backup/recovery, monitoring, Tailscale HTTPS,
+and systemd operations are documented in
+[docs/staging-operations.md](docs/staging-operations.md).

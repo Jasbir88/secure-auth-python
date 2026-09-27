@@ -53,3 +53,6 @@ src/
 .audit-venv/
 .venv-tools/
 .ruff_cache/
+
+.env.staging
+backups/

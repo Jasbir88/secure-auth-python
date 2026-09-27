@@ -1,6 +1,7 @@
 """
 Security middleware for the application.
 """
+import logging
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -39,11 +40,58 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """Log requests with timing."""
+    """Emit structured request completion logs."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        start_time = time.time()
-        response = await call_next(request)
-        process_time = time.time() - start_time
-        response.headers["X-Process-Time"] = str(round(process_time * 1000, 2))
+        logger = logging.getLogger("secure_auth.request")
+        start_time = time.monotonic()
+
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = round(
+                (time.monotonic() - start_time) * 1000,
+                2,
+            )
+
+            logger.exception(
+                "request_failed",
+                extra={
+                    "event": "http_request",
+                    "request_id": getattr(
+                        request.state,
+                        "request_id",
+                        None,
+                    ),
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                    "duration_ms": duration_ms,
+                },
+            )
+            raise
+
+        duration_ms = round(
+            (time.monotonic() - start_time) * 1000,
+            2,
+        )
+
+        response.headers["X-Process-Time"] = str(duration_ms)
+
+        logger.info(
+            "request_completed",
+            extra={
+                "event": "http_request",
+                "request_id": getattr(
+                    request.state,
+                    "request_id",
+                    None,
+                ),
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+
         return response
