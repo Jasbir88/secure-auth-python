@@ -49,3 +49,7 @@ __pycache__/
 htmlcov/
 .coverage
 src/
+
+.audit-venv/
+.venv-tools/
+.ruff_cache/

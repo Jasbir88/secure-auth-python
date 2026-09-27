@@ -1,10 +1,15 @@
 services:
   db:
-    image: postgres:16-alpine
-    container_name: auth-db
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: auth_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -15,8 +20,13 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
-    container_name: auth-redis
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -24,8 +34,13 @@ services:
       retries: 5
 
   migrate:
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     build: .
-    container_name: auth-migrate
     cap_drop:
       - ALL
     security_opt:
@@ -37,7 +52,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/auth_db
+      - DATABASE_URL=postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/auth_db
       - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=production
       - "JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set}"
@@ -48,8 +63,13 @@ services:
     restart: "no"
 
   app:
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     build: .
-    container_name: auth-app
     cap_drop:
       - ALL
     security_opt:
@@ -67,13 +87,23 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/auth_db
+      - DATABASE_URL=postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/auth_db
       - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=production
       - "JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set}"
       - JWT_ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - REFRESH_TOKEN_EXPIRE_DAYS=7
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:3000/health/ready',timeout=2)); raise SystemExit(0 if d.get('status')=='ready' else 1)"
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
     restart: on-failure
 
 volumes:

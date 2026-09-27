@@ -6,10 +6,19 @@ cd "$ROOT_DIR"
 
 API_URL="${API_URL:-http://127.0.0.1:3000}"
 
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-secure-auth-e2e-$$}"
+
 export JWT_SECRET_KEY="${JWT_SECRET_KEY:-$(
 python3 - <<'PY'
 import secrets
 print(secrets.token_urlsafe(48))
+PY
+)}"
+
+export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(
+python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
 PY
 )}"
 
@@ -93,6 +102,15 @@ wait_ready() {
 
 echo "=== COMPOSE CONFIGURATION ==="
 
+PYTHON_PIN_COUNT="$(
+    grep -Ec '^FROM python:3\.12-slim@sha256:[0-9a-f]{64}' Dockerfile
+)"
+
+[ "$PYTHON_PIN_COUNT" = "2" ] ||
+    fail "Dockerfile Python base images are not digest-pinned"
+
+pass "Dockerfile base images are digest-pinned"
+
 docker compose config --format json > "$TMP_DIR/compose.json"
 
 python3 - "$TMP_DIR/compose.json" <<'PY'
@@ -103,6 +121,68 @@ with open(sys.argv[1], encoding="utf-8") as handle:
     config = json.load(handle)
 
 services = config["services"]
+
+import re
+
+digest_pattern = re.compile(r"@sha256:[0-9a-f]{64}$")
+
+for service_name in ("db", "redis"):
+    image = services[service_name].get("image", "")
+
+    if not digest_pattern.search(image):
+        raise SystemExit(
+            f"{service_name} image is not digest-pinned: {image}"
+        )
+
+print("PASS: Compose service images are digest-pinned.")
+
+for service_name, service in services.items():
+    if service.get("container_name"):
+        raise SystemExit(
+            f"{service_name} uses a fixed container name"
+        )
+
+print("PASS: Compose avoids fixed container names.")
+
+expected_pids = {
+    "db": 256,
+    "redis": 128,
+    "migrate": 128,
+    "app": 128,
+}
+
+for service_name, expected in expected_pids.items():
+    service = services[service_name]
+
+    if int(service.get("pids_limit") or 0) != expected:
+        raise SystemExit(
+            f"{service_name} has incorrect pids_limit"
+        )
+
+    logging = service.get("logging") or {}
+    options = logging.get("options") or {}
+
+    if logging.get("driver") != "json-file":
+        raise SystemExit(
+            f"{service_name} does not use bounded json-file logging"
+        )
+
+    if (
+        str(options.get("max-size")) != "10m"
+        or str(options.get("max-file")) != "3"
+    ):
+        raise SystemExit(
+            f"{service_name} log rotation limits are incorrect"
+        )
+
+print("PASS: Compose PID and log limits are configured.")
+
+if not services["app"].get("healthcheck"):
+    raise SystemExit(
+        "application Docker healthcheck is missing"
+    )
+
+print("PASS: application Docker healthcheck is configured.")
 
 for service_name in ("db", "redis"):
     ports = services[service_name].get("ports") or []
@@ -193,8 +273,36 @@ docker compose up -d
 wait_ready >/dev/null
 pass "application readiness"
 
+APP_CONTAINER="$(docker compose ps -q app)"
+
+[ -n "$APP_CONTAINER" ] ||
+    fail "application container was not created"
+
+APP_HEALTH=""
+
+for _ in $(seq 1 30); do
+    APP_HEALTH="$(
+        docker inspect "$APP_CONTAINER" \
+            --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}'
+    )"
+
+    [ "$APP_HEALTH" = "healthy" ] && break
+    sleep 1
+done
+
+[ "$APP_HEALTH" = "healthy" ] ||
+    fail "application Docker healthcheck did not become healthy"
+
+pass "application Docker healthcheck"
+
+
+MIGRATE_ID="$(docker compose ps -aq migrate)"
+
+[ -n "$MIGRATE_ID" ] ||
+    fail "migration container was not created"
+
 MIGRATE_EXIT="$(
-    docker inspect auth-migrate \
+    docker inspect "$MIGRATE_ID" \
         --format '{{.State.ExitCode}}'
 )"
 
@@ -211,7 +319,12 @@ APP_UID="$(docker compose exec -T app id -u)"
 [ "$APP_UID" != "0" ] ||
     fail "application container is running as root"
 
-for container in auth-app auth-migrate; do
+for service_name in app migrate; do
+    container="$(docker compose ps -aq "$service_name")"
+
+    [ -n "$container" ] ||
+        fail "$service_name container was not created"
+
     configured_user="$(
         docker inspect "$container"             --format '{{.Config.User}}'
     )"
@@ -235,7 +348,12 @@ done
 pass "containers run non-root"
 pass "production image excludes build and development tools"
 
-for container in auth-app auth-migrate; do
+for service_name in app migrate; do
+    container="$(docker compose ps -aq "$service_name")"
+
+    [ -n "$container" ] ||
+        fail "$service_name container was not created"
+
     read_only="$(
         docker inspect "$container"             --format '{{.HostConfig.ReadonlyRootfs}}'
     )"
@@ -440,8 +558,8 @@ expect_http \
 echo
 echo "=== 11. IDEMPOTENT MIGRATION ==="
 
-docker start auth-migrate >/dev/null
-MIGRATE_EXIT="$(docker wait auth-migrate)"
+docker start "$MIGRATE_ID" >/dev/null
+MIGRATE_EXIT="$(docker wait "$MIGRATE_ID")"
 
 [ "$MIGRATE_EXIT" = "0" ] ||
     fail "migration rerun exited $MIGRATE_EXIT"
