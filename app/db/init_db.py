@@ -1,21 +1,21 @@
-"""
-Database initialization script.
-"""
+"""Database connectivity and schema verification helper."""
+
 import logging
+
 from sqlalchemy import text
 
-from app.db.session import engine, Base
-from app.db.models import User, RefreshToken  # Import all models
+from app.db.schema import verify_database_schema
+from app.db.session import engine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 def init_db():
-    """Create all database tables."""
-    logger.info("Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created successfully!")
+    """Verify that Alembic has prepared the database schema."""
+    logger.info("Verifying Alembic-managed database schema...")
+    verify_database_schema()
+    logger.info("Database schema verified successfully!")
 
 
 def check_db_connection():
@@ -25,8 +25,8 @@ def check_db_connection():
             conn.execute(text("SELECT 1"))
         logger.info("Database connection successful!")
         return True
-    except Exception as e:
-        logger.error(f"Database connection failed: {e}")
+    except Exception as exc:
+        logger.error("Database connection failed: %s", exc)
         return False
 
 

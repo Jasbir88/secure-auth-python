@@ -27,6 +27,23 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build: .
+    container_name: auth-migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/auth_db
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+      - "JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set}"
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+    command: ["python", "scripts/prepare_database.py"]
+    restart: "no"
+
   app:
     build: .
     container_name: auth-app
@@ -37,6 +54,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/auth_db
       - REDIS_URL=redis://redis:6379/0

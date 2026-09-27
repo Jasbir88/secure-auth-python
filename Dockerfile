@@ -17,9 +17,10 @@ COPY app ./app
 COPY auth ./auth
 COPY tests ./tests
 
-# Alembic migrations
+# Database lifecycle tooling
 COPY alembic ./alembic
 COPY alembic.ini .
+COPY scripts ./scripts
 
 EXPOSE 3000
 

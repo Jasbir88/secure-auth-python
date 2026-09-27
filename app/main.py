@@ -14,8 +14,8 @@ from app.core.middleware import (
     RequestIDMiddleware,
     RequestLoggingMiddleware,
 )
-from app.db.session import engine, Base
-from app.db.models import User, RefreshToken  # noqa: F401
+from app.db.schema import verify_database_schema
+from app.db.session import engine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,10 +58,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events."""
     logger.info("Starting up...")
 
-    # Initialize database tables
-    logger.info("Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables ready!")
+    if not TESTING:
+        logger.info("Verifying Alembic-managed database schema...")
+        verify_database_schema()
+        logger.info("Database schema verified at Alembic head.")
 
     if TESTING:
         logger.info("Testing mode: Using fake Redis...")

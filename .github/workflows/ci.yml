@@ -62,10 +62,76 @@ jobs:
           ACCESS_TOKEN_EXPIRE_MINUTES: 30
           REFRESH_TOKEN_EXPIRE_DAYS: 7
         run: |
-          python -m alembic upgrade head
+          # Fresh database bootstrap.
+          python scripts/prepare_database.py
           python -m alembic check
+
+          # Normal tracked database is idempotent.
+          python scripts/prepare_database.py
+
+          # Verify migration reversibility.
           python -m alembic downgrade base
           python -m alembic upgrade head
+          python -m alembic check
+
+          # Simulate each legitimate historical untracked database.
+          for revision in 2b7c4e1a9d03 5e3526e9e493 c4f2e8a91b7d; do
+            python -m alembic downgrade base
+            python -m alembic upgrade "$revision"
+
+            python - <<'PYCODE'
+          from sqlalchemy import text
+          from app.db.session import engine
+
+          with engine.begin() as connection:
+              connection.execute(
+                  text("DROP TABLE IF EXISTS alembic_version")
+              )
+          PYCODE
+
+            python scripts/prepare_database.py
+            python -m alembic current
+            python -m alembic check
+          done
+
+          # Unknown schema drift must fail closed.
+          python -m alembic downgrade 5e3526e9e493
+
+          python - <<'PYCODE'
+          from sqlalchemy import text
+          from app.db.session import engine
+
+          with engine.begin() as connection:
+              connection.execute(
+                  text("DROP TABLE IF EXISTS alembic_version")
+              )
+              connection.execute(
+                  text("ALTER TABLE users DROP COLUMN email")
+              )
+          PYCODE
+
+          if python scripts/prepare_database.py; then
+            echo "FAIL: unknown database drift was accepted"
+            exit 1
+          fi
+
+          echo "PASS: unknown database drift rejected"
+
+          # Restore a clean migrated database for pytest.
+          python - <<'PYCODE'
+          from sqlalchemy import text
+          from app.db import models  # noqa: F401
+          from app.db.session import Base, engine
+
+          Base.metadata.drop_all(bind=engine)
+
+          with engine.begin() as connection:
+              connection.execute(
+                  text("DROP TABLE IF EXISTS alembic_version")
+              )
+          PYCODE
+
+          python scripts/prepare_database.py
           python -m alembic check
 
       - name: Run tests
