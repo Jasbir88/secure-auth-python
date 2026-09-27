@@ -20,8 +20,11 @@ echo
 echo "=== 1. STATIC CHECKS ==="
 
 bash -n scripts/test_compose_e2e.sh
+bash -n scripts/update_runtime_lock.sh
 bash -n scripts/verify_all.sh
 git diff --check
+
+python scripts/check_runtime_lock.py
 
 echo "STATIC CHECKS: PASS"
 
