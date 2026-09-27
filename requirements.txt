@@ -8,4 +8,4 @@ httpx>=0.28.1
 
 # Development
 black>=24.1.0
-ruff>=0.1.14
+ruff>=0.16.8
