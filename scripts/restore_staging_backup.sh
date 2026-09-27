@@ -24,7 +24,7 @@ ENV_FILE=".env.staging"
 
 echo "=== VERIFY BACKUP INTEGRITY ==="
 
-python - "$BACKUP_DIR" <<'PY'
+/usr/bin/python3 - "$BACKUP_DIR" <<'PY'
 import hashlib
 import json
 import sys
@@ -159,7 +159,7 @@ wait_app
 echo "RECOVERY APPLICATION: READY"
 
 read -r EXPECTED_USERS EXPECTED_REFRESH EXPECTED_REDIS EXPECTED_REVISION < <(
-    python - "$BACKUP_DIR/manifest.json" <<'PY'
+    /usr/bin/python3 - "$BACKUP_DIR/manifest.json" <<'PY'
 import json
 import sys
 
