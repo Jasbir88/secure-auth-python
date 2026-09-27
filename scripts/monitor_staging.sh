@@ -79,7 +79,7 @@ else
 
     BACKUP_DIR="$(dirname "$LATEST_MANIFEST")"
 
-    if python - "$BACKUP_DIR" <<'PY'
+    if /usr/bin/python3 - "$BACKUP_DIR" <<'PY'
 import hashlib
 import json
 import sys

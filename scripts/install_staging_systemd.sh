@@ -13,7 +13,7 @@ RUN_USER="$(stat -c '%U' "$ROOT_DIR")"
 RUN_GROUP="$(id -gn "$RUN_USER")"
 RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
 
-python - "$ROOT_DIR" "$RUN_USER" "$RUN_GROUP" "$RUN_HOME" <<'UNITPY'
+/usr/bin/python3 - "$ROOT_DIR" "$RUN_USER" "$RUN_GROUP" "$RUN_HOME" <<'UNITPY'
 from pathlib import Path
 import sys
 

@@ -14,7 +14,7 @@ fi
 
 umask 077
 
-python - <<'PY'
+/usr/bin/python3 - <<'PY'
 import secrets
 from pathlib import Path
 

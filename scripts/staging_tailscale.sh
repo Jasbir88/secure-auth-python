@@ -6,7 +6,7 @@ LOCAL_PORT="${APP_PORT:-3000}"
 
 get_hostname() {
     tailscale status --json |
-        python -c '
+        /usr/bin/python3 -c '
 import json
 import sys
 
@@ -28,7 +28,7 @@ check_tailscale() {
 
     STATE="$(
         tailscale status --json |
-            python -c '
+            /usr/bin/python3 -c '
 import json
 import sys
 print(json.load(sys.stdin).get("BackendState", ""))

@@ -95,7 +95,7 @@ else
     WORKTREE_DIRTY=false
 fi
 
-python - \
+/usr/bin/python3 - \
     "$BACKUP_DIR" \
     "$ALEMBIC_REVISION" \
     "$USER_COUNT" \
