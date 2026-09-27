@@ -5,6 +5,7 @@ Authentication dependencies.
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import PyJWTError
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
@@ -36,6 +37,11 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    revocation_unavailable_exception = HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Authentication service temporarily unavailable",
+    )
+
     try:
         payload = decode_access_token(token)
 
@@ -43,9 +49,22 @@ async def get_current_user(
         user_id: str = payload["sub"]
         token_version: int = payload["token_version"]
 
-        # Check if token is blacklisted (use app.state.token_blacklist)
-        token_blacklist = request.app.state.token_blacklist
-        if token_blacklist and await token_blacklist.is_blacklisted(jti):
+        # Revocation state is security-critical. Never bypass it when
+        # Redis or the blacklist service is unavailable.
+        token_blacklist = getattr(
+            request.app.state,
+            "token_blacklist",
+            None,
+        )
+        if token_blacklist is None:
+            raise revocation_unavailable_exception
+
+        try:
+            is_blacklisted = await token_blacklist.is_blacklisted(jti)
+        except RedisError as exc:
+            raise revocation_unavailable_exception from exc
+
+        if is_blacklisted:
             raise revoked_exception
 
     except PyJWTError:

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi_limiter.depends import RateLimiter
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from auth.validator import is_valid_password
@@ -229,10 +230,30 @@ async def logout(
 
     access_token = credentials.credentials
     token_payload = get_token_payload(access_token)
+
     if token_payload is not None:
-        await request.app.state.token_blacklist.add(
-            token_payload["jti"], token_payload["exp"]
+        token_blacklist = getattr(
+            request.app.state,
+            "token_blacklist",
+            None,
         )
+
+        if token_blacklist is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service temporarily unavailable",
+            )
+
+        try:
+            await token_blacklist.add(
+                token_payload["jti"],
+                token_payload["exp"],
+            )
+        except RedisError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service temporarily unavailable",
+            ) from exc
 
     return {"message": "Successfully logged out"}
 

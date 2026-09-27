@@ -2,13 +2,16 @@ import os
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi_limiter import FastAPILimiter
+from redis.exceptions import RedisError
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.users import router as users_router
 from app.core.config import settings
+from app.core.redis_runtime import initialize_required_redis
 from app.core.middleware import (
     SecurityHeadersMiddleware,
     RequestIDMiddleware,
@@ -71,24 +74,18 @@ async def lifespan(app: FastAPI):
         app.state.token_blacklist = FakeTokenBlacklist()
         logger.info("Testing mode: Fake Redis initialized!")
     else:
-        logger.info("Connecting to Redis...")
+        logger.info("Connecting to required Redis services...")
         try:
-            import redis.asyncio as aioredis
-            from app.core.token_blacklist import TokenBlacklist
-
-            redis_client = aioredis.from_url(
-                settings.REDIS_URL,
-                encoding="utf-8",
-                decode_responses=True,
+            redis_client, token_blacklist = await initialize_required_redis()
+        except Exception:
+            logger.exception(
+                "Redis unavailable; refusing to start auth service."
             )
-            await FastAPILimiter.init(redis_client)
-            app.state.redis = redis_client
-            app.state.token_blacklist = TokenBlacklist(redis_client)
-            logger.info("Redis connected!")
-        except Exception as e:
-            logger.warning(f"Redis connection failed: {e}")
-            app.state.redis = None
-            app.state.token_blacklist = None
+            raise
+
+        app.state.redis = redis_client
+        app.state.token_blacklist = token_blacklist
+        logger.info("Required Redis services connected.")
 
     logger.info("Auth service ready!")
     yield
@@ -125,6 +122,22 @@ Use the `Authorization: Bearer <token>` header for protected endpoints.
         "name": "MIT",
     },
 )
+
+@app.exception_handler(RedisError)
+async def redis_unavailable_handler(
+    _request: Request,
+    exc: RedisError,
+):
+    """Return a controlled failure instead of bypassing Redis security."""
+    logger.error(
+        "Redis operation failed; failing request closed.",
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Service temporarily unavailable"},
+    )
+
 
 # Add middleware
 app.add_middleware(SecurityHeadersMiddleware)
