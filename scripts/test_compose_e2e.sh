@@ -154,7 +154,30 @@ for service_name in ("app", "migrate"):
             f"{service_name} does not enforce no-new-privileges"
         )
 
+    if service.get("read_only") is not True:
+        raise SystemExit(
+            f"{service_name} root filesystem is not read-only"
+        )
+
+    tmpfs_entries = service.get("tmpfs") or []
+
+    tmpfs_paths = set()
+
+    for entry in tmpfs_entries:
+        if isinstance(entry, str):
+            tmpfs_paths.add(entry.split(":", 1)[0])
+        elif isinstance(entry, dict):
+            target = entry.get("target")
+            if target:
+                tmpfs_paths.add(target)
+
+    if "/tmp" not in tmpfs_paths:
+        raise SystemExit(
+            f"{service_name} does not provide a /tmp tmpfs"
+        )
+
 print("PASS: Compose runtime privileges are restricted.")
+print("PASS: Compose root filesystems are read-only.")
 PY
 
 python3 scripts/check_compose_security.py
@@ -211,6 +234,46 @@ done
 
 pass "containers run non-root"
 pass "production image excludes build and development tools"
+
+for container in auth-app auth-migrate; do
+    read_only="$(
+        docker inspect "$container"             --format '{{.HostConfig.ReadonlyRootfs}}'
+    )"
+
+    [ "$read_only" = "true" ] ||
+        fail "$container root filesystem is not read-only"
+
+    tmpfs_options="$(
+        docker inspect "$container"             --format '{{index .HostConfig.Tmpfs "/tmp"}}'
+    )"
+
+    for option in noexec nosuid nodev; do
+        case ",$tmpfs_options," in
+            *",$option,"*)
+                ;;
+            *)
+                fail "$container /tmp is missing $option"
+                ;;
+        esac
+    done
+done
+
+if docker compose exec -T app sh -ec     'touch /app/.secure-auth-write-probe 2>/dev/null'
+then
+    docker compose exec -T app         rm -f /app/.secure-auth-write-probe || true
+    fail "application could write to its read-only root filesystem"
+fi
+
+pass "application root filesystem rejects writes"
+
+docker compose exec -T app sh -ec '
+probe=/tmp/.secure-auth-tmpfs-probe
+printf "ok" > "$probe"
+test "$(cat "$probe")" = "ok"
+rm -f "$probe"
+'
+
+pass "/tmp tmpfs remains writable"
 
 SUFFIX="$(
 python3 - <<'PY'
