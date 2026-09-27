@@ -7,5 +7,5 @@ pytest-cov>=4.1.0
 httpx>=0.28.1
 
 # Development
-black>=24.1.0
-ruff>=0.1.14
+black>=26.5.1
+ruff>=0.16.8
