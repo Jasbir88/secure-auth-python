@@ -26,6 +26,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
 
 from app.core.config import settings
@@ -36,7 +37,7 @@ from app.db.types import GUID
 
 BASE_SCHEMA_REVISION = "2b7c4e1a9d03"
 TOKEN_VERSION_REVISION = "5e3526e9e493"
-HEAD_REVISION = "c4f2e8a91b7d"
+FAMILY_TRACKING_REVISION = "c4f2e8a91b7d"
 
 APP_TABLES = {"users", "refresh_tokens"}
 VERSION_TABLE = "alembic_version"
@@ -61,7 +62,10 @@ def historical_metadata(revision: str) -> sa.MetaData:
         sa.Column("created_at", sa.DateTime(), nullable=False),
     ]
 
-    if revision == TOKEN_VERSION_REVISION:
+    if revision in {
+        TOKEN_VERSION_REVISION,
+        FAMILY_TRACKING_REVISION,
+    }:
         user_columns.append(
             sa.Column("token_version", sa.Integer(), nullable=False)
         )
@@ -69,9 +73,7 @@ def historical_metadata(revision: str) -> sa.MetaData:
     users = sa.Table("users", metadata, *user_columns)
     sa.Index("ix_users_email", users.c.email, unique=True)
 
-    refresh_tokens = sa.Table(
-        "refresh_tokens",
-        metadata,
+    refresh_token_columns: list[sa.Column] = [
         sa.Column("id", GUID(), primary_key=True, nullable=False),
         sa.Column(
             "user_id",
@@ -79,18 +81,57 @@ def historical_metadata(revision: str) -> sa.MetaData:
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("token_hash", sa.String(), nullable=False),
-        sa.Column("expires_at", sa.DateTime(), nullable=False),
-        sa.Column("revoked", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+    ]
+
+    if revision == FAMILY_TRACKING_REVISION:
+        refresh_token_columns.extend(
+            [
+                sa.Column("family_id", GUID(), nullable=False),
+                sa.Column("replaced_by_token_id", GUID(), nullable=True),
+            ]
+        )
+
+    refresh_token_columns.extend(
+        [
+            sa.Column("token_hash", sa.String(), nullable=False),
+            sa.Column("expires_at", sa.DateTime(), nullable=False),
+            sa.Column("revoked", sa.Boolean(), nullable=False),
+            sa.Column("created_at", sa.DateTime(), nullable=False),
+        ]
     )
+
+    refresh_tokens = sa.Table(
+        "refresh_tokens",
+        metadata,
+        *refresh_token_columns,
+    )
+
     sa.Index(
         "ix_refresh_tokens_token_hash",
         refresh_tokens.c.token_hash,
         unique=False,
     )
 
+    if revision == FAMILY_TRACKING_REVISION:
+        sa.Index(
+            "ix_refresh_tokens_family_id",
+            refresh_tokens.c.family_id,
+            unique=False,
+        )
+
     return metadata
+
+
+def current_head_revision(config: Config) -> str:
+    """Return the repository's sole current Alembic head."""
+    heads = ScriptDirectory.from_config(config).get_heads()
+
+    if len(heads) != 1:
+        raise RuntimeError(
+            "Database preparation requires exactly one Alembic head."
+        )
+
+    return heads[0]
 
 
 def schema_differences(metadata: sa.MetaData) -> list:
@@ -133,8 +174,14 @@ def main() -> int:
             )
             return 1
 
+        head_revision = current_head_revision(config)
+
         candidates = (
-            (HEAD_REVISION, Base.metadata),
+            (head_revision, Base.metadata),
+            (
+                FAMILY_TRACKING_REVISION,
+                historical_metadata(FAMILY_TRACKING_REVISION),
+            ),
             (
                 TOKEN_VERSION_REVISION,
                 historical_metadata(TOKEN_VERSION_REVISION),

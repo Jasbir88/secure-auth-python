@@ -75,7 +75,7 @@ jobs:
           python -m alembic check
 
           # Simulate each legitimate historical untracked database.
-          for revision in 2b7c4e1a9d03 5e3526e9e493 c4f2e8a91b7d; do
+          for revision in 2b7c4e1a9d03 5e3526e9e493 c4f2e8a91b7d head; do
             python -m alembic downgrade base
             python -m alembic upgrade "$revision"
 
@@ -93,6 +93,128 @@ jobs:
             python -m alembic current
             python -m alembic check
           done
+
+          # Duplicate legacy token hashes must block the unique-index migration.
+          python -m alembic downgrade c4f2e8a91b7d
+
+          python - <<'PYCODE'
+          import uuid
+          from datetime import UTC, datetime, timedelta
+
+          from sqlalchemy import text
+
+          from app.db.session import engine
+
+          user_id = uuid.uuid4()
+          first_token_id = uuid.uuid4()
+          second_token_id = uuid.uuid4()
+          now = datetime.now(UTC).replace(tzinfo=None)
+          expires_at = now + timedelta(days=1)
+
+          with engine.begin() as connection:
+              connection.execute(
+                  text(
+                      """
+                      INSERT INTO users
+                          (
+                              id,
+                              email,
+                              password_hash,
+                              is_active,
+                              created_at,
+                              token_version
+                          )
+                      VALUES
+                          (
+                              :id,
+                              :email,
+                              :password_hash,
+                              true,
+                              :created_at,
+                              1
+                          )
+                      """
+                  ),
+                  {
+                      "id": user_id,
+                      "email": "migration-duplicate@example.com",
+                      "password_hash": "test-hash",
+                      "created_at": now,
+                  },
+              )
+
+              for token_id in (first_token_id, second_token_id):
+                  connection.execute(
+                      text(
+                          """
+                          INSERT INTO refresh_tokens
+                              (
+                                  id,
+                                  user_id,
+                                  family_id,
+                                  replaced_by_token_id,
+                                  token_hash,
+                                  expires_at,
+                                  revoked,
+                                  created_at
+                              )
+                          VALUES
+                              (
+                                  :id,
+                                  :user_id,
+                                  :family_id,
+                                  NULL,
+                                  :token_hash,
+                                  :expires_at,
+                                  false,
+                                  :created_at
+                              )
+                          """
+                      ),
+                      {
+                          "id": token_id,
+                          "user_id": user_id,
+                          "family_id": token_id,
+                          "token_hash": "duplicate-migration-test-hash",
+                          "expires_at": expires_at,
+                          "created_at": now,
+                      },
+                  )
+          PYCODE
+
+          if python -m alembic upgrade head; then
+            echo "FAIL: duplicate refresh-token hashes were accepted"
+            exit 1
+          fi
+
+          echo "PASS: duplicate refresh-token hashes rejected"
+
+          python - <<'PYCODE'
+          from sqlalchemy import text
+
+          from app.db.session import engine
+
+          with engine.begin() as connection:
+              connection.execute(
+                  text(
+                      """
+                      DELETE FROM refresh_tokens
+                      WHERE token_hash = 'duplicate-migration-test-hash'
+                      """
+                  )
+              )
+              connection.execute(
+                  text(
+                      """
+                      DELETE FROM users
+                      WHERE email = 'migration-duplicate@example.com'
+                      """
+                  )
+              )
+          PYCODE
+
+          python -m alembic upgrade head
+          python -m alembic check
 
           # Unknown schema drift must fail closed.
           python -m alembic downgrade 5e3526e9e493
