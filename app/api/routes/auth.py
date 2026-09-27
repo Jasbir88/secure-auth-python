@@ -13,6 +13,7 @@ from auth.validator import is_valid_password
 
 from app.core.config import settings
 from app.core.dependencies import get_current_user
+from app.core.sessions import revoke_active_refresh_tokens
 from app.core.security import (
     DUMMY_PASSWORD_HASH,
     create_access_token,
@@ -177,6 +178,16 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         )
 
     user = db.query(User).filter(User.id == token.user_id).first()
+    if user is None or not user.is_active:
+        if user is not None:
+            revoke_active_refresh_tokens(db, user.id)
+            db.commit()
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
     new_access = create_access_token(str(token.user_id), user.token_version)
     new_refresh = create_refresh_token()
 
@@ -234,9 +245,7 @@ async def logout_all_devices(
     """Logout from all devices by incrementing token_version."""
     current_user.token_version += 1
 
-    db.query(RefreshToken).filter(
-        RefreshToken.user_id == current_user.id, RefreshToken.revoked.is_(False)
-    ).update({"revoked": True})
+    revoke_active_refresh_tokens(db, current_user.id)
 
     db.commit()
 

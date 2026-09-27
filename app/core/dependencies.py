@@ -56,6 +56,9 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
+    if not user.is_active:
+        raise revoked_exception
+
     # Check token version (logout-all-devices support)
     if user.token_version != token_version:
         raise revoked_exception
