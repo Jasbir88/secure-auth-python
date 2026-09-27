@@ -1,26 +1,47 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements-runtime.txt .
+RUN pip install --upgrade pip \
+    && pip install -r requirements-runtime.txt
+
+
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    HOME="/nonexistent"
+
+RUN groupadd --gid 10001 app \
+    && useradd \
+        --uid 10001 \
+        --gid app \
+        --no-create-home \
+        --home-dir /nonexistent \
+        --shell /usr/sbin/nologin \
+        app
 
 WORKDIR /app
 
-# System deps (git required for private repos)
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /opt/venv /opt/venv
 
-# Dependency layer (cache-friendly)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=app:app app ./app
+COPY --chown=app:app auth ./auth
+COPY --chown=app:app alembic ./alembic
+COPY --chown=app:app alembic.ini .
+COPY --chown=app:app scripts/prepare_database.py ./scripts/prepare_database.py
 
-# App code
-COPY app ./app
-COPY auth ./auth
-COPY tests ./tests
-
-# Database lifecycle tooling
-COPY alembic ./alembic
-COPY alembic.ini .
-COPY scripts ./scripts
+USER 10001:10001
 
 EXPOSE 3000
 

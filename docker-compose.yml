@@ -26,6 +26,10 @@ services:
   migrate:
     build: .
     container_name: auth-migrate
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       db:
         condition: service_healthy
@@ -43,6 +47,10 @@ services:
   app:
     build: .
     container_name: auth-app
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
