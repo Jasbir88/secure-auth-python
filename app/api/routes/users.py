@@ -5,8 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.orm import Session
 
+from auth.validator import is_valid_password
+
 from app.core.dependencies import get_current_user
 from app.core.security import hash_user_password, verify_user_password
+from app.core.sessions import revoke_active_refresh_tokens
 from app.db.session import get_db
 from app.db.models import User
 from app.schemas.user import (
@@ -83,8 +86,16 @@ async def change_password(
             detail="Current password is incorrect",
         )
 
-    # Update password
+    if not is_valid_password(payload.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid password data",
+        )
+
+    # A credential change invalidates every existing session.
     current_user.password_hash = hash_user_password(payload.new_password)
+    current_user.token_version += 1
+    revoke_active_refresh_tokens(db, current_user.id)
     db.commit()
 
     return {"message": "Password changed successfully"}
@@ -103,6 +114,8 @@ async def delete_account(
     This performs a soft delete (sets is_active to False).
     """
     current_user.is_active = False
+    current_user.token_version += 1
+    revoke_active_refresh_tokens(db, current_user.id)
     db.commit()
 
     return {"message": "Account deactivated successfully"}
