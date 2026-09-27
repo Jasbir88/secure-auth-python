@@ -269,3 +269,24 @@ jobs:
           REFRESH_TOKEN_EXPIRE_DAYS: 7
         run: |
           pytest -v --tb=short
+
+  compose-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Show Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Run production Compose E2E security gate
+        run: bash scripts/test_compose_e2e.sh
