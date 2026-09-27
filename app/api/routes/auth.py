@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi_limiter.depends import RateLimiter
-from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from auth.validator import is_valid_password
@@ -132,18 +131,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     dependencies=[Depends(RateLimiter(times=10, seconds=60))],
 )
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
-    """Refresh access token using refresh token."""
+    """Rotate a refresh token and detect reuse of rotated tokens."""
     hashed = hash_refresh_token(payload.refresh_token)
 
+    # PostgreSQL serializes concurrent rotations of the same token here.
+    # SQLite ignores FOR UPDATE, which is sufficient for sequential tests.
     token = (
         db.query(RefreshToken)
-        .filter(
-            and_(
-                RefreshToken.token_hash == hashed,
-                RefreshToken.revoked.is_(False),
-                RefreshToken.expires_at > datetime.now(timezone.utc),
-            )
-        )
+        .filter(RefreshToken.token_hash == hashed)
+        .with_for_update()
         .first()
     )
 
@@ -153,20 +149,50 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
             detail="Invalid or expired refresh token",
         )
 
-    token.revoked = True
+    # A revoked token that has a replacement was previously rotated.
+    # Seeing it again is refresh-token reuse, so revoke only its family.
+    if token.revoked:
+        if token.replaced_by_token_id is not None:
+            db.query(RefreshToken).filter(
+                RefreshToken.family_id == token.family_id,
+                RefreshToken.revoked.is_(False),
+            ).update({"revoked": True}, synchronize_session=False)
+            db.commit()
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    # DateTime is timezone-naive on some supported database backends.
+    now = datetime.now(timezone.utc)
+    expires_at = token.expires_at
+    if expires_at.tzinfo is None:
+        now = now.replace(tzinfo=None)
+
+    if expires_at <= now:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
 
     user = db.query(User).filter(User.id == token.user_id).first()
     new_access = create_access_token(str(token.user_id), user.token_version)
     new_refresh = create_refresh_token()
 
-    db.add(
-        RefreshToken(
-            user_id=token.user_id,
-            token_hash=hash_refresh_token(new_refresh),
-            expires_at=datetime.now(timezone.utc)
-            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-        )
+    new_token = RefreshToken(
+        user_id=token.user_id,
+        family_id=token.family_id,
+        token_hash=hash_refresh_token(new_refresh),
+        expires_at=datetime.now(timezone.utc)
+        + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
+    db.add(new_token)
+    db.flush()
+
+    token.revoked = True
+    token.replaced_by_token_id = new_token.id
+
     db.commit()
 
     return TokenResponse(
