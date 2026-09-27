@@ -1,6 +1,6 @@
 # FastAPI Auth Service — production runtime
 fastapi>=0.109.0,<0.137.0
-uvicorn[standard]>=0.27.0
+uvicorn[standard]>=0.53.0
 sqlalchemy>=2.0.25
 psycopg2-binary>=2.9.9
 redis>=5.0.1
