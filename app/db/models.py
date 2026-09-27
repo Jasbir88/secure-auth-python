@@ -45,6 +45,14 @@ class RefreshToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("users.id", ondelete="CASCADE")
     )
+    family_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), default=uuid.uuid4, index=True
+    )
+    # Immutable lineage marker. Deliberately not a foreign key so cleanup
+    # of descendant rows cannot erase evidence that this token was rotated.
+    replaced_by_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), nullable=True
+    )
     token_hash: Mapped[str] = mapped_column(String, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
