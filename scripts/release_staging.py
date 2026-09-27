@@ -20,6 +20,11 @@ STATE_DIR = ROOT / ".release-state"
 STATE_FILE = STATE_DIR / "staging.json"
 LOCK_FILE = STATE_DIR / "staging-operation.lock"
 
+
+class ReleaseError(RuntimeError):
+    """Controlled release-operation failure."""
+
+
 COMPOSE_BASE = [
     "docker",
     "compose",
@@ -89,7 +94,7 @@ def compose(
 
 def ensure_prerequisites() -> None:
     if not ENV_FILE.is_file():
-        raise SystemExit(
+        raise ReleaseError(
             "ERROR: .env.staging is missing."
         )
 
@@ -108,7 +113,7 @@ def acquire_lock():
         )
     except BlockingIOError:
         handle.close()
-        raise SystemExit(
+        raise ReleaseError(
             "ERROR: another staging release/backup operation is active."
         )
 
@@ -137,12 +142,12 @@ def require_clean_main() -> str:
     branch = git_branch()
 
     if branch != "main":
-        raise SystemExit(
+        raise ReleaseError(
             f"ERROR: releases require branch main; current={branch}"
         )
 
     if git_dirty():
-        raise SystemExit(
+        raise ReleaseError(
             "ERROR: working tree is dirty; refusing deployment."
         )
 
@@ -162,7 +167,7 @@ def require_clean_main() -> str:
     )
 
     if local != remote:
-        raise SystemExit(
+        raise ReleaseError(
             "ERROR: local main is not exactly origin/main; "
             "pull the latest main before deploying."
         )
@@ -216,7 +221,7 @@ def immutable_image(
     repository, separator, _tag = current_image.rpartition(":")
 
     if not separator:
-        raise SystemExit(
+        raise ReleaseError(
             f"ERROR: unexpected image reference: {current_image}"
         )
 
@@ -311,7 +316,7 @@ def latest_backup() -> str:
     )
 
     if not manifests:
-        raise SystemExit(
+        raise ReleaseError(
             "ERROR: backup command completed but no manifest exists."
         )
 
@@ -358,56 +363,56 @@ def verify_staging() -> None:
 def build_release(
     release_id: str,
 ) -> tuple[str, str, str]:
-    env = release_env(release_id=release_id)
+    current_env = release_env(
+        release_id=release_id,
+        channel="current",
+    )
+    immutable_env = release_env(
+        release_id=release_id,
+        channel=release_id,
+    )
 
-    current = rendered_app_image(env)
-    immutable = immutable_image(
+    current = rendered_app_image(current_env)
+    immutable = rendered_app_image(immutable_env)
+
+    expected_immutable = immutable_image(
         current,
         release_id,
     )
+
+    if immutable != expected_immutable:
+        raise ReleaseError(
+            "ERROR: immutable release image reference "
+            f"does not match expectation: {immutable}"
+        )
 
     print("\n=== BUILD IMMUTABLE RELEASE ===")
     print(f"Release: {release_id}")
     print(f"Current pointer: {current}")
     print(f"Immutable image: {immutable}")
 
+    # Build directly to the immutable Git-SHA tag.
+    # Do not mutate the :current deployment pointer yet.
     compose(
         "build",
         "--pull",
         "app",
-        env=env,
-    )
-
-    built_id = image_id(current)
-
-    run(
-        [
-            "docker",
-            "tag",
-            current,
-            immutable,
-        ]
+        env=immutable_env,
     )
 
     immutable_id = image_id(immutable)
-
-    if immutable_id != built_id:
-        raise SystemExit(
-            "ERROR: immutable image ID differs from built image."
-        )
-
     revision = image_revision(immutable)
 
     if revision != release_id:
-        raise SystemExit(
+        raise ReleaseError(
             "ERROR: image release label mismatch: "
             f"{revision!r}"
         )
 
     print("PASS: immutable image label matches Git SHA")
+    print("PASS: current image pointer remains unchanged")
 
     return current, immutable, immutable_id
-
 
 def retag_and_restart(
     source_image: str,
@@ -416,7 +421,7 @@ def retag_and_restart(
     release_id: str,
 ) -> None:
     if image_revision(source_image) != release_id:
-        raise SystemExit(
+        raise ReleaseError(
             "ERROR: rollback image release label mismatch."
         )
 
@@ -521,7 +526,7 @@ def command_deploy() -> None:
                 expected_revision
                 and expected_revision != before_revision
             ):
-                raise SystemExit(
+                raise ReleaseError(
                     "ERROR: database revision drift detected; "
                     "release state does not match the database."
                 )
@@ -540,7 +545,10 @@ def command_deploy() -> None:
                 immutable_id,
             ) = build_release(release_id)
 
-            env = release_env(release_id=release_id)
+            env = release_env(
+                release_id=release_id,
+                channel=release_id,
+            )
 
             print("\n=== DATABASE MIGRATION ===")
 
@@ -572,6 +580,27 @@ def command_deploy() -> None:
             )
 
             verify_staging()
+
+            # Verification succeeded. Only now advance the
+            # mutable deployment pointer to this immutable image.
+            run(
+                [
+                    "docker",
+                    "tag",
+                    immutable,
+                    current_image,
+                ]
+            )
+
+            if image_id(current_image) != immutable_id:
+                raise ReleaseError(
+                    "ERROR: current image pointer verification failed."
+                )
+
+            print(
+                "PASS: current image pointer advanced "
+                "after successful verification"
+            )
 
         except Exception:
             if current_image:
@@ -621,7 +650,7 @@ def command_rollback() -> None:
         state = read_state()
 
         if not state:
-            raise SystemExit(
+            raise ReleaseError(
                 "ERROR: no release state exists."
             )
 
@@ -629,19 +658,19 @@ def command_rollback() -> None:
         previous = state.get("previous")
 
         if not current or not previous:
-            raise SystemExit(
+            raise ReleaseError(
                 "ERROR: no previous release is available."
             )
 
         database = db_revision()
 
         if database != current["db_revision"]:
-            raise SystemExit(
+            raise ReleaseError(
                 "ERROR: database revision drift detected."
             )
 
         if previous["db_revision"] != database:
-            raise SystemExit(
+            raise ReleaseError(
                 "ROLLBACK BLOCKED: previous release used "
                 "a different Alembic revision. "
                 "Automatic database downgrade is forbidden."
@@ -767,6 +796,9 @@ def main() -> int:
         else:
             command_status()
 
+    except ReleaseError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     except subprocess.CalledProcessError as exc:
         print(
             f"ERROR: command failed with exit code "
