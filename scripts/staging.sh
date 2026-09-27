@@ -43,9 +43,14 @@ case "${1:-}" in
     up)
         "${COMPOSE[@]}" config --quiet
 
-        "${COMPOSE[@]}" build --pull
-
-        "${COMPOSE[@]}" up -d
+        if [[ -f ".release-state/staging.json" ]]; then
+            echo "Release-managed staging detected."
+            echo "Using existing immutable current image."
+            "${COMPOSE[@]}" up -d --no-build
+        else
+            "${COMPOSE[@]}" build --pull
+            "${COMPOSE[@]}" up -d
+        fi
 
         wait_ready
 

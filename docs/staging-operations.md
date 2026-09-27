@@ -158,3 +158,62 @@ Record the deployed Git commit and verify health after deployment.
 Alembic migrations are forward-managed. Rolling application code back
 across an incompatible schema change requires explicit migration or
 recovery planning rather than blindly checking out an older commit.
+
+## Release management
+
+Staging releases are managed by:
+
+    /usr/bin/python3 scripts/release_staging.py
+
+Inspect the active release:
+
+    /usr/bin/python3 scripts/release_staging.py status
+
+Deploy only from clean, fully synchronized main:
+
+    git switch main
+    git pull --ff-only
+    /usr/bin/python3 scripts/release_staging.py deploy
+
+A managed deployment:
+
+1. requires clean local main to exactly match origin/main;
+2. acquires the staging operation lock;
+3. creates a fresh PostgreSQL and Redis backup;
+4. builds the application with the exact Git commit as RELEASE_ID;
+5. creates an immutable Git-SHA image tag;
+6. verifies the OCI revision label;
+7. runs Alembic database preparation;
+8. activates the already-built image without rebuilding;
+9. verifies application dependencies, Tailscale HTTPS and monitoring;
+10. records current and previous release metadata.
+
+Release metadata is stored under .release-state/ and is not committed.
+
+### Code rollback
+
+Inspect release state:
+
+    /usr/bin/python3 scripts/release_staging.py status
+
+Rollback:
+
+    /usr/bin/python3 scripts/release_staging.py rollback
+
+Automatic rollback changes only the application image.
+
+PostgreSQL and Redis are not automatically restored or downgraded.
+
+A code rollback is allowed only when the previous release and the
+live database have the same Alembic revision.
+
+If the schema revision changed, automatic rollback is blocked.
+Use the documented backup and disaster-recovery procedure instead.
+
+### Release safety rules
+
+- Never delete PostgreSQL or Redis volumes for an application rollback.
+- Never manually alter the alembic_version table to bypass a rollback block.
+- Never deploy from a dirty tree, feature branch, or stale local main.
+- Never rebuild an immutable release during rollback.
+- Keep database recovery separate from application-image rollback.
