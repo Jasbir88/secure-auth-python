@@ -130,6 +130,31 @@ if (
     )
 
 print("PASS: Compose host exposure is restricted.")
+
+for service_name in ("app", "migrate"):
+    service = services[service_name]
+
+    cap_drop = {
+        str(value).upper()
+        for value in service.get("cap_drop", [])
+    }
+
+    if "ALL" not in cap_drop:
+        raise SystemExit(
+            f"{service_name} does not drop all Linux capabilities"
+        )
+
+    security_options = {
+        str(value).lower()
+        for value in service.get("security_opt", [])
+    }
+
+    if "no-new-privileges:true" not in security_options:
+        raise SystemExit(
+            f"{service_name} does not enforce no-new-privileges"
+        )
+
+print("PASS: Compose runtime privileges are restricted.")
 PY
 
 python3 scripts/check_compose_security.py
@@ -154,6 +179,38 @@ MIGRATE_EXIT="$(
     fail "initial migration exited $MIGRATE_EXIT"
 
 pass "initial migration"
+
+echo
+echo "=== CONTAINER RUNTIME HARDENING ==="
+
+APP_UID="$(docker compose exec -T app id -u)"
+
+[ "$APP_UID" != "0" ] ||
+    fail "application container is running as root"
+
+for container in auth-app auth-migrate; do
+    configured_user="$(
+        docker inspect "$container"             --format '{{.Config.User}}'
+    )"
+
+    case "$configured_user" in
+        ""|0|root|0:0)
+            fail "$container has an unsafe configured user"
+            ;;
+    esac
+done
+
+docker compose exec -T app sh -ec '
+for tool in git gcc pytest black ruff; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        echo "unexpected production tool: $tool" >&2
+        exit 1
+    fi
+done
+'
+
+pass "containers run non-root"
+pass "production image excludes build and development tools"
 
 SUFFIX="$(
 python3 - <<'PY'
