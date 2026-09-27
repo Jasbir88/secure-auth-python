@@ -62,16 +62,22 @@ def main() -> int:
                 print("FAIL: Compose could not render with a generated test key.")
                 return 1
             rendered = json.loads(result.stdout)
-            app_environment = rendered["services"]["app"]["environment"]
-            if (
-                app_environment.get("ENVIRONMENT") != "production"
-                or app_environment.get("JWT_SECRET_KEY") != test_key
-            ):
-                print(
-                    "FAIL: Compose did not pass production mode and the supplied key."
-                )
-                return 1
-            print("PASS: Compose passes production mode and a generated test key.")
+            for service_name in ("app", "migrate"):
+                environment = rendered["services"][service_name]["environment"]
+                if (
+                    environment.get("ENVIRONMENT") != "production"
+                    or environment.get("JWT_SECRET_KEY") != test_key
+                ):
+                    print(
+                        "FAIL: Compose did not pass production mode and "
+                        f"the supplied key to {service_name}."
+                    )
+                    return 1
+
+            print(
+                "PASS: Compose passes production mode and a generated "
+                "test key to app and migration services."
+            )
         except FileNotFoundError:
             print("Docker Compose CLI is required; no configuration was checked.")
             return 2
