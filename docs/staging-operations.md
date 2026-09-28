@@ -217,3 +217,10 @@ Use the documented backup and disaster-recovery procedure instead.
 - Never deploy from a dirty tree, feature branch, or stale local main.
 - Never rebuild an immutable release during rollback.
 - Keep database recovery separate from application-image rollback.
+
+## Rollback validation
+
+The managed staging release process is periodically validated with a
+code-only rollback drill. A rollback must reuse an existing immutable image,
+leave PostgreSQL and Redis data untouched, require an identical Alembic
+revision, and pass the normal staging, private HTTPS and monitoring checks.
