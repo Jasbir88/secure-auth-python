@@ -21,21 +21,38 @@ COMPOSE=(
 )
 
 wait_ready() {
+    local app_id=""
+    local health=""
+
     for _ in $(seq 1 60); do
-        if curl \
-            --fail \
-            --silent \
-            --show-error \
-            http://127.0.0.1:3000/health/ready \
-            >/dev/null 2>&1
-        then
-            return 0
+        app_id="$(
+            "${COMPOSE[@]}" ps -q app 2>/dev/null || true
+        )"
+
+        if [[ -n "$app_id" ]]; then
+            health="$(
+                docker inspect "$app_id" \
+                    --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+                    2>/dev/null || true
+            )"
+
+            if [[ "$health" == "healthy" ]] && \
+                curl \
+                    --fail \
+                    --silent \
+                    --show-error \
+                    http://127.0.0.1:3000/health/ready \
+                    >/dev/null 2>&1
+            then
+                return 0
+            fi
         fi
 
         sleep 1
     done
 
-    echo "ERROR: staging application did not become ready."
+    echo "ERROR: staging application did not become healthy and ready."
+    echo "Last Docker health state: ${health:-unavailable}"
     return 1
 }
 
