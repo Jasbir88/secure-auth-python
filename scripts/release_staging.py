@@ -45,6 +45,7 @@ def run(
     env: dict[str, str] | None = None,
     capture: bool = False,
     check: bool = True,
+    input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -53,6 +54,7 @@ def run(
         text=True,
         capture_output=capture,
         check=check,
+        input=input_text,
     )
 
 
@@ -173,6 +175,125 @@ def require_clean_main() -> str:
         )
 
     return local
+
+
+def staging_env_value(name: str) -> str:
+    """Read one value from the controlled staging env file."""
+    for raw in ENV_FILE.read_text(
+        encoding="utf-8"
+    ).splitlines():
+        line = raw.strip()
+
+        if (
+            not line
+            or line.startswith("#")
+            or "=" not in line
+        ):
+            continue
+
+        key, value = line.split("=", 1)
+
+        if key != name:
+            continue
+
+        value = value.strip()
+
+        if (
+            len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in {"'", '"'}
+        ):
+            value = value[1:-1]
+
+        if not value:
+            break
+
+        return value
+
+    raise ReleaseError(
+        f"ERROR: {name} is missing from .env.staging."
+    )
+
+
+def verify_db_credentials() -> None:
+    """Prove .env.staging authenticates before deployment."""
+    password = staging_env_value(
+        "POSTGRES_PASSWORD"
+    )
+
+    result = run(
+        [
+            *COMPOSE_BASE,
+            "ps",
+            "-q",
+            "db",
+        ],
+        capture=True,
+        check=False,
+    )
+
+    container = result.stdout.strip()
+
+    if result.returncode != 0 or not container:
+        raise ReleaseError(
+            "ERROR: staging database container is unavailable."
+        )
+
+    # PostgreSQL .pgpass escapes backslashes and colons.
+    escaped = (
+        password
+        .replace("\\", "\\\\")
+        .replace(":", "\\:")
+    )
+
+    pgpass = (
+        "127.0.0.1:5432:"
+        f"auth_db:postgres:{escaped}\n"
+    )
+
+    shell = """
+set -eu
+file="$(mktemp)"
+trap 'rm -f "$file"' EXIT
+chmod 600 "$file"
+cat > "$file"
+PGPASSFILE="$file" \
+    psql \
+    -h 127.0.0.1 \
+    -U postgres \
+    -d auth_db \
+    -At \
+    -c 'SELECT 1;'
+"""
+
+    probe = run(
+        [
+            "docker",
+            "exec",
+            "-i",
+            container,
+            "sh",
+            "-c",
+            shell,
+        ],
+        input_text=pgpass,
+        capture=True,
+        check=False,
+    )
+
+    if (
+        probe.returncode != 0
+        or probe.stdout.strip() != "1"
+    ):
+        raise ReleaseError(
+            "ERROR: .env.staging PostgreSQL credential "
+            "preflight failed; refusing deployment."
+        )
+
+    print(
+        "PASS: .env.staging PostgreSQL "
+        "credentials authenticate"
+    )
 
 
 def db_revision() -> str:
@@ -514,6 +635,10 @@ def command_deploy() -> None:
 
     try:
         release_id = require_clean_main()
+
+        print("\n=== DATABASE CREDENTIAL PREFLIGHT ===")
+        verify_db_credentials()
+
         state = read_state()
         before_revision = db_revision()
 

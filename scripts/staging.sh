@@ -91,6 +91,10 @@ case "${1:-}" in
     verify)
         "${COMPOSE[@]}" config --quiet
 
+        # Recreated containers may need several seconds before
+        # the readiness endpoint accepts connections.
+        wait_ready
+
         curl \
             --fail \
             --silent \
