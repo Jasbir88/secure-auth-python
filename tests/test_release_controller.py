@@ -72,3 +72,97 @@ def test_build_release_targets_immutable_tag(monkeypatch):
         seen["env"]["RELEASE_ID"]
         == release_id
     )
+
+
+def test_database_preflight_accepts_valid_credentials(
+    monkeypatch,
+    tmp_path,
+):
+    env_file = tmp_path / ".env.staging"
+    env_file.write_text(
+        "POSTGRES_PASSWORD=test-secret\n",
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    monkeypatch.setattr(
+        release,
+        "ENV_FILE",
+        env_file,
+    )
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+
+        class Result:
+            returncode = 0
+            stdout = (
+                "db-container\n"
+                if "ps" in command
+                else "1\n"
+            )
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(
+        release,
+        "run",
+        fake_run,
+    )
+
+    release.verify_db_credentials()
+
+    assert len(calls) == 2
+    assert calls[1][1]["input_text"].endswith(
+        "test-secret\n"
+    )
+
+
+def test_database_preflight_fails_closed(
+    monkeypatch,
+    tmp_path,
+):
+    env_file = tmp_path / ".env.staging"
+    env_file.write_text(
+        "POSTGRES_PASSWORD=wrong-secret\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        release,
+        "ENV_FILE",
+        env_file,
+    )
+
+    call_number = 0
+
+    def fake_run(command, **kwargs):
+        nonlocal call_number
+        call_number += 1
+
+        class Result:
+            returncode = 0
+            stdout = "db-container\n"
+            stderr = ""
+
+        result = Result()
+
+        if call_number == 2:
+            result.returncode = 2
+            result.stdout = ""
+
+        return result
+
+    monkeypatch.setattr(
+        release,
+        "run",
+        fake_run,
+    )
+
+    with pytest.raises(
+        release.ReleaseError,
+        match="credential preflight failed",
+    ):
+        release.verify_db_credentials()
