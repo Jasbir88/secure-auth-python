@@ -36,6 +36,13 @@ class Settings(BaseSettings):
         le=168,
     )
 
+    # Password reset
+    PASSWORD_RESET_EXPIRE_MINUTES: int = Field(
+        default=30,
+        ge=5,
+        le=120,
+    )
+
     # SMTP delivery. These remain optional until an SMTP provider is configured.
     SMTP_HOST: str | None = None
     SMTP_PORT: int = Field(default=587, ge=1, le=65535)

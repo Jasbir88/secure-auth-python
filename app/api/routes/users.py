@@ -12,6 +12,8 @@ from auth.validator import is_valid_password
 
 from app.core.auth_actions import (
     EMAIL_VERIFICATION_PURPOSE,
+    PASSWORD_RESET_PURPOSE,
+    invalidate_auth_action_tokens,
     issue_auth_action_token,
 )
 from app.core.config import settings
@@ -74,6 +76,13 @@ async def update_profile(
         current_user.token_version += 1
         revoke_active_refresh_tokens(db, current_user.id)
 
+        # Recovery sent to the previous email identity must stop working.
+        invalidate_auth_action_tokens(
+            db,
+            current_user,
+            purpose=PASSWORD_RESET_PURPOSE,
+        )
+
         raw_token = issue_auth_action_token(
             db,
             current_user,
@@ -132,6 +141,13 @@ async def change_password(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid password data",
         )
+
+    # A credential change also invalidates outstanding recovery links.
+    invalidate_auth_action_tokens(
+        db,
+        current_user,
+        purpose=PASSWORD_RESET_PURPOSE,
+    )
 
     # A credential change invalidates every existing session.
     current_user.password_hash = hash_user_password(payload.new_password)

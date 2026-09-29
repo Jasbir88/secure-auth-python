@@ -26,6 +26,15 @@ class EmailSender(Protocol):
     ) -> None:
         """Deliver an email-verification token."""
 
+    def send_password_reset(
+        self,
+        *,
+        recipient: str,
+        token: str,
+        expires_minutes: int,
+    ) -> None:
+        """Deliver a password-reset token."""
+
 
 class UnconfiguredEmailSender:
     """Fail closed when no SMTP provider has been configured."""
@@ -36,6 +45,15 @@ class UnconfiguredEmailSender:
         recipient: str,
         token: str,
         expires_hours: int,
+    ) -> None:
+        raise EmailDeliveryError("Email delivery is not configured")
+
+    def send_password_reset(
+        self,
+        *,
+        recipient: str,
+        token: str,
+        expires_minutes: int,
     ) -> None:
         raise EmailDeliveryError("Email delivery is not configured")
 
@@ -62,25 +80,7 @@ class SMTPEmailSender:
         self.starttls = starttls
         self.timeout_seconds = timeout_seconds
 
-    def send_verification(
-        self,
-        *,
-        recipient: str,
-        token: str,
-        expires_hours: int,
-    ) -> None:
-        message = EmailMessage()
-        message["Subject"] = "Verify your email"
-        message["From"] = self.from_email
-        message["To"] = recipient
-        message.set_content(
-            "Secure Auth email verification\n\n"
-            "Use this one-time verification token:\n\n"
-            f"{token}\n\n"
-            f"This token expires in {expires_hours} hours.\n\n"
-            "If you did not create this account, ignore this message."
-        )
-
+    def _deliver(self, message: EmailMessage) -> None:
         try:
             with smtplib.SMTP(
                 self.host,
@@ -110,6 +110,48 @@ class SMTPEmailSender:
             raise
         except (OSError, smtplib.SMTPException) as exc:
             raise EmailDeliveryError("Email delivery failed") from exc
+
+    def send_verification(
+        self,
+        *,
+        recipient: str,
+        token: str,
+        expires_hours: int,
+    ) -> None:
+        message = EmailMessage()
+        message["Subject"] = "Verify your email"
+        message["From"] = self.from_email
+        message["To"] = recipient
+        message.set_content(
+            "Secure Auth email verification\n\n"
+            "Use this one-time verification token:\n\n"
+            f"{token}\n\n"
+            f"This token expires in {expires_hours} hours.\n\n"
+            "If you did not create this account, ignore this message."
+        )
+
+        self._deliver(message)
+
+    def send_password_reset(
+        self,
+        *,
+        recipient: str,
+        token: str,
+        expires_minutes: int,
+    ) -> None:
+        message = EmailMessage()
+        message["Subject"] = "Reset your password"
+        message["From"] = self.from_email
+        message["To"] = recipient
+        message.set_content(
+            "Secure Auth password reset\n\n"
+            "Use this one-time password-reset token:\n\n"
+            f"{token}\n\n"
+            f"This token expires in {expires_minutes} minutes.\n\n"
+            "If you did not request a password reset, ignore this message."
+        )
+
+        self._deliver(message)
 
 
 def build_email_sender() -> EmailSender:

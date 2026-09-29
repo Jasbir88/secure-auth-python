@@ -92,3 +92,56 @@ def test_smtp_sender_requires_password_with_username() -> None:
         )
 
     smtp.send_message.assert_not_called()
+
+
+def test_unconfigured_sender_password_reset_fails_closed() -> None:
+    sender = UnconfiguredEmailSender()
+
+    with pytest.raises(
+        EmailDeliveryError,
+        match="not configured",
+    ):
+        sender.send_password_reset(
+            recipient="user@example.com",
+            token="reset-secret",
+            expires_minutes=30,
+        )
+
+
+def test_smtp_sender_delivers_password_reset_message() -> None:
+    smtp = MagicMock()
+    smtp.__enter__.return_value = smtp
+
+    sender = SMTPEmailSender(
+        host="smtp.example.com",
+        port=587,
+        from_email="security@example.com",
+        username="mailer",
+        password="smtp-secret",
+        starttls=True,
+    )
+
+    with patch(
+        "app.core.email_delivery.smtplib.SMTP",
+        return_value=smtp,
+    ):
+        sender.send_password_reset(
+            recipient="user@example.com",
+            token="password-reset-secret",
+            expires_minutes=30,
+        )
+
+    smtp.starttls.assert_called_once()
+    smtp.login.assert_called_once_with(
+        "mailer",
+        "smtp-secret",
+    )
+    smtp.send_message.assert_called_once()
+
+    message = smtp.send_message.call_args.args[0]
+
+    assert message["Subject"] == "Reset your password"
+    assert message["To"] == "user@example.com"
+    assert message["From"] == "security@example.com"
+    assert "password-reset-secret" in message.get_content()
+    assert "30 minutes" in message.get_content()
