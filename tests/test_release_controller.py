@@ -145,3 +145,131 @@ def test_database_preflight_fails_closed(
         match="credential preflight failed",
     ):
         release.verify_db_credentials()
+
+
+def test_smtp_preflight_accepts_valid_credentials(
+    monkeypatch,
+    tmp_path,
+):
+    env_file = tmp_path / ".env.staging"
+    env_file.write_text(
+        "\n".join(
+            [
+                "SMTP_HOST=smtp.example.com",
+                "SMTP_PORT=587",
+                "SMTP_USERNAME=test@example.com",
+                "SMTP_PASSWORD=test-app-password",
+                "SMTP_FROM_EMAIL=test@example.com",
+                "SMTP_STARTTLS=true",
+                "SMTP_TIMEOUT_SECONDS=10",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        release,
+        "ENV_FILE",
+        env_file,
+    )
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            assert host == "smtp.example.com"
+            assert port == 587
+            assert timeout == 10.0
+            self.login_args = None
+            self.starttls_called = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def ehlo(self):
+            return 250, b"ok"
+
+        def starttls(self, context=None):
+            assert context is not None
+            self.starttls_called = True
+            return 220, b"ready"
+
+        def login(self, username, password):
+            assert username == "test@example.com"
+            assert password == "test-app-password"
+            return 235, b"authenticated"
+
+        def noop(self):
+            return 250, b"ok"
+
+    monkeypatch.setattr(
+        release.smtplib,
+        "SMTP",
+        FakeSMTP,
+    )
+
+    release.verify_smtp_credentials()
+
+
+def test_smtp_preflight_fails_closed_on_authentication_error(
+    monkeypatch,
+    tmp_path,
+):
+    env_file = tmp_path / ".env.staging"
+    env_file.write_text(
+        "\n".join(
+            [
+                "SMTP_HOST=smtp.example.com",
+                "SMTP_PORT=587",
+                "SMTP_USERNAME=test@example.com",
+                "SMTP_PASSWORD=wrong-password",
+                "SMTP_FROM_EMAIL=test@example.com",
+                "SMTP_STARTTLS=true",
+                "SMTP_TIMEOUT_SECONDS=10",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        release,
+        "ENV_FILE",
+        env_file,
+    )
+
+    class BrokenSMTP:
+        def __init__(self, host, port, timeout):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def ehlo(self):
+            return 250, b"ok"
+
+        def starttls(self, context=None):
+            return 220, b"ready"
+
+        def login(self, username, password):
+            raise release.smtplib.SMTPAuthenticationError(
+                535,
+                b"authentication failed",
+            )
+
+    monkeypatch.setattr(
+        release.smtplib,
+        "SMTP",
+        BrokenSMTP,
+    )
+
+    with pytest.raises(
+        release.ReleaseError,
+        match="SMTP credential preflight failed",
+    ):
+        release.verify_smtp_credentials()

@@ -7,6 +7,8 @@ import argparse
 import fcntl
 import json
 import os
+import smtplib
+import ssl
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -248,6 +250,78 @@ PGPASSFILE="$file" \
         )
 
     print("PASS: .env.staging PostgreSQL " "credentials authenticate")
+
+
+def verify_smtp_credentials() -> None:
+    """Prove staging SMTP connectivity, TLS, and authentication."""
+    host = staging_env_value("SMTP_HOST")
+    username = staging_env_value("SMTP_USERNAME")
+    password = staging_env_value("SMTP_PASSWORD")
+    from_email = staging_env_value("SMTP_FROM_EMAIL")
+
+    try:
+        port = int(staging_env_value("SMTP_PORT"))
+    except ValueError as exc:
+        raise ReleaseError("ERROR: SMTP_PORT must be an integer.") from exc
+
+    try:
+        timeout = float(staging_env_value("SMTP_TIMEOUT_SECONDS"))
+    except ValueError as exc:
+        raise ReleaseError("ERROR: SMTP_TIMEOUT_SECONDS must be numeric.") from exc
+
+    if not 1 <= port <= 65535:
+        raise ReleaseError("ERROR: SMTP_PORT is outside the valid range.")
+
+    if not 0 < timeout <= 60:
+        raise ReleaseError(
+            "ERROR: SMTP_TIMEOUT_SECONDS must be greater than 0 and at most 60."
+        )
+
+    starttls_raw = staging_env_value("SMTP_STARTTLS").lower()
+
+    if starttls_raw not in {"true", "false"}:
+        raise ReleaseError("ERROR: SMTP_STARTTLS must be true or false.")
+
+    starttls = starttls_raw == "true"
+
+    if "@" not in from_email:
+        raise ReleaseError("ERROR: SMTP_FROM_EMAIL is not a valid email address.")
+
+    try:
+        with smtplib.SMTP(
+            host,
+            port,
+            timeout=timeout,
+        ) as smtp:
+            smtp.ehlo()
+
+            if starttls:
+                smtp.starttls(context=ssl.create_default_context())
+                smtp.ehlo()
+
+            smtp.login(
+                username,
+                password,
+            )
+
+            code, _message = smtp.noop()
+
+            if code != 250:
+                raise ReleaseError(
+                    "ERROR: SMTP server did not accept authenticated NOOP."
+                )
+
+    except ReleaseError:
+        raise
+    except (
+        OSError,
+        smtplib.SMTPException,
+    ) as exc:
+        raise ReleaseError(
+            "ERROR: staging SMTP credential preflight failed; " "refusing deployment."
+        ) from exc
+
+    print("PASS: staging SMTP TLS/authentication preflight")
 
 
 def db_revision() -> str:
@@ -557,6 +631,9 @@ def command_deploy() -> None:
 
         print("\n=== DATABASE CREDENTIAL PREFLIGHT ===")
         verify_db_credentials()
+
+        print("\n=== SMTP CREDENTIAL PREFLIGHT ===")
+        verify_smtp_credentials()
 
         state = read_state()
         before_revision = db_revision()
