@@ -6,6 +6,7 @@ import pytest
 
 from app.api.routes import auth as auth_routes
 from app.db.models import User
+from tests.auth_helpers import register_and_verify
 
 
 @pytest.mark.parametrize(
@@ -19,11 +20,11 @@ from app.db.models import User
 def test_login_performs_one_password_verification(
     client, db_session, email, password, expected_status
 ):
-    response = client.post(
-        "/auth/register",
-        json={"email": "known@example.com", "password": "SecurePass123!"},
+    register_and_verify(
+        client,
+        "known@example.com",
+        "SecurePass123!",
     )
-    assert response.status_code == 201
     user = db_session.query(User).filter(User.email == "known@example.com").one()
     expected_hash = (
         user.password_hash if email == user.email else auth_routes.DUMMY_PASSWORD_HASH

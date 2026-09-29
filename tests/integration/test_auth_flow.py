@@ -3,6 +3,7 @@ Integration tests for complete auth flow.
 """
 
 from app.db.models import User
+from tests.auth_helpers import register_verified_user
 
 
 class TestAuthFlow:
@@ -10,18 +11,11 @@ class TestAuthFlow:
 
     def test_register_login_logout_flow(self, client, db_session):
         """Test complete user journey."""
-        # Register
-        response = client.post(
-            "/auth/register",
-            json={
-                "email": "newuser@example.com",
-                "password": "SecurePass123!",
-            },
+        tokens = register_verified_user(
+            client,
+            "newuser@example.com",
+            "SecurePass123!",
         )
-        assert response.status_code == 201
-        tokens = response.json()
-        assert "access_token" in tokens
-        assert "refresh_token" in tokens
 
         # Access protected route
         response = client.get(

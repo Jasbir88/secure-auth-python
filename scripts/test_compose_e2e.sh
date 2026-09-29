@@ -424,7 +424,7 @@ EMAIL="compose-e2e-${SUFFIX}@example.com"
 PASSWORD='SecurePass123!'
 
 echo
-echo "=== 1. REGISTER ==="
+echo "=== 1. REGISTRATION FAILS CLOSED WITHOUT SMTP ==="
 
 REGISTER_CODE="$(
     curl -sS \
@@ -435,13 +435,57 @@ REGISTER_CODE="$(
         -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}"
 )"
 
-expect_http "registration" 201 "$REGISTER_CODE"
-
-ACCESS1="$(json_get "$TMP_DIR/register.json" access_token)"
-REFRESH1="$(json_get "$TMP_DIR/register.json" refresh_token)"
+expect_http "unconfigured SMTP registration" 503 "$REGISTER_CODE"
 
 echo
-echo "=== 2. PROTECTED ACCESS ==="
+echo "=== 2. VERIFY SYNTHETIC E2E ACCOUNT IN DISPOSABLE DB ==="
+
+docker compose exec -T db \
+    psql -U postgres -d auth_db \
+    -v ON_ERROR_STOP=1 \
+    -v email="$EMAIL" <<'SQL' >/dev/null
+UPDATE users
+SET email_verified_at = created_at
+WHERE email = :'email';
+SQL
+
+VERIFIED_COUNT="$(
+    docker compose exec -T db \
+        psql -U postgres -d auth_db \
+        -At \
+        -v ON_ERROR_STOP=1 \
+        -v email="$EMAIL" <<'SQL'
+SELECT count(*)
+FROM users
+WHERE email = :'email'
+  AND email_verified_at IS NOT NULL;
+SQL
+)"
+
+[ "$VERIFIED_COUNT" = "1" ] ||
+    fail "synthetic E2E account was not marked verified"
+
+pass "synthetic E2E account verification"
+
+echo
+echo "=== 3. INITIAL LOGIN ==="
+
+LOGIN1_CODE="$(
+    curl -sS \
+        -o "$TMP_DIR/login1.json" \
+        -w '%{http_code}' \
+        -X POST "$API_URL/auth/login" \
+        -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}"
+)"
+
+expect_http "initial verified login" 200 "$LOGIN1_CODE"
+
+ACCESS1="$(json_get "$TMP_DIR/login1.json" access_token)"
+REFRESH1="$(json_get "$TMP_DIR/login1.json" refresh_token)"
+
+echo
+echo "=== 4. PROTECTED ACCESS ==="
 
 ME_CODE="$(
     curl -sS \

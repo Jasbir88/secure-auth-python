@@ -5,16 +5,16 @@ import pytest
 
 from app.core.config import settings
 from app.core.security import decode_access_token
+from tests.auth_helpers import register_verified_user
 
 
 @pytest.fixture
 def registered_tokens(client):
-    response = client.post(
-        "/auth/register",
-        json={"email": "claims@example.com", "password": "SecurePass123!"},
+    return register_verified_user(
+        client,
+        "claims@example.com",
+        "SecurePass123!",
     )
-    assert response.status_code == 201
-    return response.json()
 
 
 @pytest.mark.parametrize(
