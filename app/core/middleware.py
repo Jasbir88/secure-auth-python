@@ -1,6 +1,7 @@
 """
 Security middleware for the application.
 """
+
 import logging
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware

@@ -7,7 +7,6 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-
 EXTRA_FIELDS = (
     "event",
     "request_id",
@@ -35,9 +34,7 @@ class JsonFormatter(logging.Formatter):
                 payload[field] = value
 
         if record.exc_info:
-            payload["exception"] = self.formatException(
-                record.exc_info
-            )
+            payload["exception"] = self.formatException(record.exc_info)
 
         return json.dumps(
             payload,

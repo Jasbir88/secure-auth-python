@@ -22,22 +22,16 @@ def verify_database_schema() -> None:
     expected_heads = set(script.get_heads())
 
     if len(expected_heads) != 1:
-        raise RuntimeError(
-            "Application requires exactly one Alembic migration head."
-        )
+        raise RuntimeError("Application requires exactly one Alembic migration head.")
 
     with engine.connect() as connection:
         context = MigrationContext.configure(connection)
         current_heads = set(context.get_current_heads())
 
         if current_heads != expected_heads:
-            raise RuntimeError(
-                "Database is not at the required Alembic revision."
-            )
+            raise RuntimeError("Database is not at the required Alembic revision.")
 
         differences = compare_metadata(context, Base.metadata)
 
     if differences:
-        raise RuntimeError(
-            "Database schema differs from application metadata."
-        )
+        raise RuntimeError("Database schema differs from application metadata.")

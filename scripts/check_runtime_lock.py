@@ -7,7 +7,6 @@ import re
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "requirements-runtime.txt"
 LOCK = ROOT / "requirements-runtime.lock"
@@ -33,9 +32,7 @@ def main() -> int:
     match = MARKER_RE.search(lock_text)
 
     if match is None:
-        print(
-            "FAIL: requirements-runtime.lock has no source SHA-256 marker."
-        )
+        print("FAIL: requirements-runtime.lock has no source SHA-256 marker.")
         print("Run: bash scripts/update_runtime_lock.sh")
         return 1
 

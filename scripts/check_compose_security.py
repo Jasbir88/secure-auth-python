@@ -25,9 +25,7 @@ def main() -> int:
         "POSTGRES_PASSWORD": postgres_password,
     }
 
-    with TemporaryDirectory(
-        prefix="secure-auth-compose-"
-    ) as temporary:
+    with TemporaryDirectory(prefix="secure-auth-compose-") as temporary:
         empty_env = Path(temporary) / "empty.env"
         empty_env.write_text("", encoding="utf-8")
 
@@ -80,61 +78,37 @@ def main() -> int:
 
                     result = render(environment)
 
-                    if (
-                        result.returncode == 0
-                        or expected_error not in result.stderr
-                    ):
-                        print(
-                            f"FAIL: Compose accepted {label} {name}."
-                        )
+                    if result.returncode == 0 or expected_error not in result.stderr:
+                        print(f"FAIL: Compose accepted {label} {name}.")
                         return 1
 
-                    print(
-                        f"PASS: Compose rejects {label} {name}."
-                    )
+                    print(f"PASS: Compose rejects {label} {name}.")
 
             result = render(valid_environment)
 
             if result.returncode != 0:
-                print(
-                    "FAIL: Compose could not render with "
-                    "generated secrets."
-                )
+                print("FAIL: Compose could not render with " "generated secrets.")
                 return 1
 
             rendered = json.loads(result.stdout)
 
             expected_database_url = (
-                "postgresql+psycopg2://postgres:"
-                f"{postgres_password}@db:5432/auth_db"
+                "postgresql+psycopg2://postgres:" f"{postgres_password}@db:5432/auth_db"
             )
 
-            db_environment = (
-                rendered["services"]["db"]["environment"]
-            )
+            db_environment = rendered["services"]["db"]["environment"]
 
-            if (
-                db_environment.get("POSTGRES_PASSWORD")
-                != postgres_password
-            ):
-                print(
-                    "FAIL: generated PostgreSQL password "
-                    "was not propagated."
-                )
+            if db_environment.get("POSTGRES_PASSWORD") != postgres_password:
+                print("FAIL: generated PostgreSQL password " "was not propagated.")
                 return 1
 
             for service_name in ("app", "migrate"):
-                environment = rendered["services"][
-                    service_name
-                ]["environment"]
+                environment = rendered["services"][service_name]["environment"]
 
                 if (
-                    environment.get("ENVIRONMENT")
-                    != "production"
-                    or environment.get("JWT_SECRET_KEY")
-                    != jwt_key
-                    or environment.get("DATABASE_URL")
-                    != expected_database_url
+                    environment.get("ENVIRONMENT") != "production"
+                    or environment.get("JWT_SECRET_KEY") != jwt_key
+                    or environment.get("DATABASE_URL") != expected_database_url
                 ):
                     print(
                         "FAIL: generated production secrets "
@@ -142,10 +116,7 @@ def main() -> int:
                     )
                     return 1
 
-            print(
-                "PASS: Compose propagates generated production "
-                "secrets correctly."
-            )
+            print("PASS: Compose propagates generated production " "secrets correctly.")
 
         except FileNotFoundError:
             print("Docker Compose CLI is required.")
@@ -154,15 +125,10 @@ def main() -> int:
             print("FAIL: Compose check timed out.")
             return 1
         except (ValueError, KeyError, TypeError):
-            print(
-                "FAIL: unexpected Compose JSON structure."
-            )
+            print("FAIL: unexpected Compose JSON structure.")
             return 1
 
-    print(
-        "Compose security checks: PASS. "
-        "No containers started; no secrets saved."
-    )
+    print("Compose security checks: PASS. " "No containers started; no secrets saved.")
     return 0
 
 

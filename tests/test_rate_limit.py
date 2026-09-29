@@ -15,9 +15,7 @@ def make_request(
     headers=None,
     client=("127.0.0.1", 12345),
 ):
-    app = SimpleNamespace(
-        state=SimpleNamespace(redis=redis)
-    )
+    app = SimpleNamespace(state=SimpleNamespace(redis=redis))
 
     encoded_headers = [
         (
@@ -80,9 +78,7 @@ async def test_rate_limiter_returns_429_with_retry_after():
 
     assert exc.value.status_code == 429
     assert exc.value.detail == "Too Many Requests"
-    assert exc.value.headers == {
-        "Retry-After": "2"
-    }
+    assert exc.value.headers == {"Retry-After": "2"}
 
 
 @pytest.mark.asyncio
@@ -101,9 +97,7 @@ async def test_rate_limiter_fails_closed_without_redis():
         )
 
     assert exc.value.status_code == 503
-    assert exc.value.detail == (
-        "Service temporarily unavailable"
-    )
+    assert exc.value.detail == ("Service temporarily unavailable")
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,6 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from app.core.redis_runtime import initialize_required_redis
 from app.main import app
 
-
 PASSWORD = "SecurePass123!"
 
 
@@ -43,9 +42,7 @@ def register(client, email: str):
 @pytest.mark.asyncio
 async def test_required_redis_startup_fails_when_ping_fails():
     redis_client = AsyncMock()
-    redis_client.ping.side_effect = RedisConnectionError(
-        "Redis unavailable"
-    )
+    redis_client.ping.side_effect = RedisConnectionError("Redis unavailable")
 
     with patch(
         "app.core.redis_runtime.aioredis.from_url",
@@ -105,9 +102,7 @@ def test_logout_reports_blacklist_write_failure_and_can_retry(client):
     )
 
     assert first.status_code == 503
-    assert first.json() == {
-        "detail": "Authentication service temporarily unavailable"
-    }
+    assert first.json() == {"detail": "Authentication service temporarily unavailable"}
 
     app.state.token_blacklist = WorkingBlacklist()
 
@@ -126,9 +121,7 @@ def test_rate_limiter_redis_failure_returns_503(client):
     original_redis = app.state.redis
 
     broken_redis = AsyncMock()
-    broken_redis.eval.side_effect = RedisConnectionError(
-        "Redis unavailable"
-    )
+    broken_redis.eval.side_effect = RedisConnectionError("Redis unavailable")
 
     app.state.redis = broken_redis
 
@@ -144,6 +137,4 @@ def test_rate_limiter_redis_failure_returns_503(client):
         app.state.redis = original_redis
 
     assert response.status_code == 503
-    assert response.json() == {
-        "detail": "Service temporarily unavailable"
-    }
+    assert response.json() == {"detail": "Service temporarily unavailable"}

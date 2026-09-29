@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env.staging"
 STATE_DIR = ROOT / ".release-state"
@@ -96,9 +95,7 @@ def compose(
 
 def ensure_prerequisites() -> None:
     if not ENV_FILE.is_file():
-        raise ReleaseError(
-            "ERROR: .env.staging is missing."
-        )
+        raise ReleaseError("ERROR: .env.staging is missing.")
 
     STATE_DIR.mkdir(mode=0o700, exist_ok=True)
     os.chmod(STATE_DIR, 0o700)
@@ -115,9 +112,7 @@ def acquire_lock():
         )
     except BlockingIOError:
         handle.close()
-        raise ReleaseError(
-            "ERROR: another staging release/backup operation is active."
-        )
+        raise ReleaseError("ERROR: another staging release/backup operation is active.")
 
     return handle
 
@@ -127,31 +122,21 @@ def git_head() -> str:
 
 
 def git_branch() -> str:
-    return output(
-        ["git", "branch", "--show-current"]
-    )
+    return output(["git", "branch", "--show-current"])
 
 
 def git_dirty() -> bool:
-    return bool(
-        output(
-            ["git", "status", "--porcelain"]
-        )
-    )
+    return bool(output(["git", "status", "--porcelain"]))
 
 
 def require_clean_main() -> str:
     branch = git_branch()
 
     if branch != "main":
-        raise ReleaseError(
-            f"ERROR: releases require branch main; current={branch}"
-        )
+        raise ReleaseError(f"ERROR: releases require branch main; current={branch}")
 
     if git_dirty():
-        raise ReleaseError(
-            "ERROR: working tree is dirty; refusing deployment."
-        )
+        raise ReleaseError("ERROR: working tree is dirty; refusing deployment.")
 
     run(
         [
@@ -164,9 +149,7 @@ def require_clean_main() -> str:
     )
 
     local = git_head()
-    remote = output(
-        ["git", "rev-parse", "origin/main"]
-    )
+    remote = output(["git", "rev-parse", "origin/main"])
 
     if local != remote:
         raise ReleaseError(
@@ -179,16 +162,10 @@ def require_clean_main() -> str:
 
 def staging_env_value(name: str) -> str:
     """Read one value from the controlled staging env file."""
-    for raw in ENV_FILE.read_text(
-        encoding="utf-8"
-    ).splitlines():
+    for raw in ENV_FILE.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
 
-        if (
-            not line
-            or line.startswith("#")
-            or "=" not in line
-        ):
+        if not line or line.startswith("#") or "=" not in line:
             continue
 
         key, value = line.split("=", 1)
@@ -198,11 +175,7 @@ def staging_env_value(name: str) -> str:
 
         value = value.strip()
 
-        if (
-            len(value) >= 2
-            and value[0] == value[-1]
-            and value[0] in {"'", '"'}
-        ):
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
             value = value[1:-1]
 
         if not value:
@@ -210,16 +183,12 @@ def staging_env_value(name: str) -> str:
 
         return value
 
-    raise ReleaseError(
-        f"ERROR: {name} is missing from .env.staging."
-    )
+    raise ReleaseError(f"ERROR: {name} is missing from .env.staging.")
 
 
 def verify_db_credentials() -> None:
     """Prove .env.staging authenticates before deployment."""
-    password = staging_env_value(
-        "POSTGRES_PASSWORD"
-    )
+    password = staging_env_value("POSTGRES_PASSWORD")
 
     result = run(
         [
@@ -235,21 +204,12 @@ def verify_db_credentials() -> None:
     container = result.stdout.strip()
 
     if result.returncode != 0 or not container:
-        raise ReleaseError(
-            "ERROR: staging database container is unavailable."
-        )
+        raise ReleaseError("ERROR: staging database container is unavailable.")
 
     # PostgreSQL .pgpass escapes backslashes and colons.
-    escaped = (
-        password
-        .replace("\\", "\\\\")
-        .replace(":", "\\:")
-    )
+    escaped = password.replace("\\", "\\\\").replace(":", "\\:")
 
-    pgpass = (
-        "127.0.0.1:5432:"
-        f"auth_db:postgres:{escaped}\n"
-    )
+    pgpass = "127.0.0.1:5432:" f"auth_db:postgres:{escaped}\n"
 
     shell = """
 set -eu
@@ -281,19 +241,13 @@ PGPASSFILE="$file" \
         check=False,
     )
 
-    if (
-        probe.returncode != 0
-        or probe.stdout.strip() != "1"
-    ):
+    if probe.returncode != 0 or probe.stdout.strip() != "1":
         raise ReleaseError(
             "ERROR: .env.staging PostgreSQL credential "
             "preflight failed; refusing deployment."
         )
 
-    print(
-        "PASS: .env.staging PostgreSQL "
-        "credentials authenticate"
-    )
+    print("PASS: .env.staging PostgreSQL " "credentials authenticate")
 
 
 def db_revision() -> str:
@@ -310,10 +264,7 @@ def db_revision() -> str:
             "auth_db",
             "-At",
             "-c",
-            (
-                "SELECT version_num "
-                "FROM alembic_version LIMIT 1;"
-            ),
+            ("SELECT version_num " "FROM alembic_version LIMIT 1;"),
         ]
     )
 
@@ -342,9 +293,7 @@ def immutable_image(
     repository, separator, _tag = current_image.rpartition(":")
 
     if not separator:
-        raise ReleaseError(
-            f"ERROR: unexpected image reference: {current_image}"
-        )
+        raise ReleaseError(f"ERROR: unexpected image reference: {current_image}")
 
     return f"{repository}:{release_id}"
 
@@ -370,10 +319,7 @@ def image_revision(image: str) -> str:
             "inspect",
             image,
             "--format",
-            (
-                '{{index .Config.Labels '
-                '"org.opencontainers.image.revision"}}'
-            ),
+            ("{{index .Config.Labels " '"org.opencontainers.image.revision"}}'),
         ]
     )
 
@@ -430,20 +376,12 @@ def write_state(state: dict[str, Any]) -> None:
 
 
 def latest_backup() -> str:
-    manifests = sorted(
-        (ROOT / "backups" / "staging").glob(
-            "*/manifest.json"
-        )
-    )
+    manifests = sorted((ROOT / "backups" / "staging").glob("*/manifest.json"))
 
     if not manifests:
-        raise ReleaseError(
-            "ERROR: backup command completed but no manifest exists."
-        )
+        raise ReleaseError("ERROR: backup command completed but no manifest exists.")
 
-    return str(
-        manifests[-1].parent.relative_to(ROOT)
-    )
+    return str(manifests[-1].parent.relative_to(ROOT))
 
 
 def create_backup() -> str:
@@ -466,9 +404,7 @@ def create_backup() -> str:
 def verify_staging() -> None:
     print("\n=== POST-DEPLOY VERIFICATION ===")
 
-    run(
-        ["bash", "scripts/staging.sh", "verify"]
-    )
+    run(["bash", "scripts/staging.sh", "verify"])
     run(
         [
             "bash",
@@ -476,9 +412,7 @@ def verify_staging() -> None:
             "verify",
         ]
     )
-    run(
-        ["bash", "scripts/monitor_staging.sh"]
-    )
+    run(["bash", "scripts/monitor_staging.sh"])
 
 
 def build_release(
@@ -525,15 +459,13 @@ def build_release(
     revision = image_revision(immutable)
 
     if revision != release_id:
-        raise ReleaseError(
-            "ERROR: image release label mismatch: "
-            f"{revision!r}"
-        )
+        raise ReleaseError("ERROR: image release label mismatch: " f"{revision!r}")
 
     print("PASS: immutable image label matches Git SHA")
     print("PASS: current image pointer remains unchanged")
 
     return current, immutable, immutable_id
+
 
 def retag_and_restart(
     source_image: str,
@@ -542,9 +474,7 @@ def retag_and_restart(
     release_id: str,
 ) -> None:
     if image_revision(source_image) != release_id:
-        raise ReleaseError(
-            "ERROR: rollback image release label mismatch."
-        )
+        raise ReleaseError("ERROR: rollback image release label mismatch.")
 
     run(
         [
@@ -577,15 +507,9 @@ def rollback_failed_deploy(
     after_revision = db_revision()
 
     if after_revision != before_revision:
-        print(
-            "\nROLLBACK BLOCKED: database revision changed."
-        )
-        print(
-            f"Before: {before_revision}"
-        )
-        print(
-            f"After:  {after_revision}"
-        )
+        print("\nROLLBACK BLOCKED: database revision changed.")
+        print(f"Before: {before_revision}")
+        print(f"After:  {after_revision}")
         print(
             "Use the disaster-recovery plan; "
             "the controller will not downgrade PostgreSQL."
@@ -599,10 +523,7 @@ def rollback_failed_deploy(
         )
         return False
 
-    print(
-        "\nDatabase revision unchanged; restoring "
-        "previous application image."
-    )
+    print("\nDatabase revision unchanged; restoring " "previous application image.")
 
     run(
         [
@@ -622,9 +543,7 @@ def rollback_failed_deploy(
         "app",
     )
 
-    run(
-        ["bash", "scripts/staging.sh", "verify"]
-    )
+    run(["bash", "scripts/staging.sh", "verify"])
 
     print("AUTOMATIC CODE ROLLBACK: PASS")
     return True
@@ -643,14 +562,9 @@ def command_deploy() -> None:
         before_revision = db_revision()
 
         if state and state.get("current"):
-            expected_revision = state["current"].get(
-                "db_revision"
-            )
+            expected_revision = state["current"].get("db_revision")
 
-            if (
-                expected_revision
-                and expected_revision != before_revision
-            ):
+            if expected_revision and expected_revision != before_revision:
                 raise ReleaseError(
                     "ERROR: database revision drift detected; "
                     "release state does not match the database."
@@ -687,10 +601,7 @@ def command_deploy() -> None:
 
             after_revision = db_revision()
 
-            print(
-                "Database revision: "
-                f"{before_revision} -> {after_revision}"
-            )
+            print("Database revision: " f"{before_revision} -> {after_revision}")
 
             print("\n=== ACTIVATE RELEASE ===")
 
@@ -718,13 +629,10 @@ def command_deploy() -> None:
             )
 
             if image_id(current_image) != immutable_id:
-                raise ReleaseError(
-                    "ERROR: current image pointer verification failed."
-                )
+                raise ReleaseError("ERROR: current image pointer verification failed.")
 
             print(
-                "PASS: current image pointer advanced "
-                "after successful verification"
+                "PASS: current image pointer advanced " "after successful verification"
             )
 
         except Exception:
@@ -736,11 +644,7 @@ def command_deploy() -> None:
                 )
             raise
 
-        previous = (
-            state.get("current")
-            if state
-            else None
-        )
+        previous = state.get("current") if state else None
 
         new_state = {
             "version": 1,
@@ -775,24 +679,18 @@ def command_rollback() -> None:
         state = read_state()
 
         if not state:
-            raise ReleaseError(
-                "ERROR: no release state exists."
-            )
+            raise ReleaseError("ERROR: no release state exists.")
 
         current = state.get("current")
         previous = state.get("previous")
 
         if not current or not previous:
-            raise ReleaseError(
-                "ERROR: no previous release is available."
-            )
+            raise ReleaseError("ERROR: no previous release is available.")
 
         database = db_revision()
 
         if database != current["db_revision"]:
-            raise ReleaseError(
-                "ERROR: database revision drift detected."
-            )
+            raise ReleaseError("ERROR: database revision drift detected.")
 
         if previous["db_revision"] != database:
             raise ReleaseError(
@@ -803,18 +701,12 @@ def command_rollback() -> None:
 
         backup = create_backup()
 
-        env = release_env(
-            release_id=current["release_id"]
-        )
+        env = release_env(release_id=current["release_id"])
         current_pointer = rendered_app_image(env)
 
         print("\n=== CODE ROLLBACK ===")
-        print(
-            f"Current:  {current['release_id']}"
-        )
-        print(
-            f"Previous: {previous['release_id']}"
-        )
+        print(f"Current:  {current['release_id']}")
+        print(f"Previous: {previous['release_id']}")
 
         retag_and_restart(
             previous["image"],
@@ -838,9 +730,7 @@ def command_rollback() -> None:
 
         print("\n======================================")
         print("STAGING CODE ROLLBACK: PASS")
-        print(
-            f"Active release: {previous['release_id']}"
-        )
+        print(f"Active release: {previous['release_id']}")
         print("Database was not modified.")
         print("======================================")
 
@@ -888,18 +778,12 @@ def command_status() -> None:
     except subprocess.CalledProcessError:
         revision = ""
 
-    print(
-        "Release label: "
-        + (revision or "unavailable")
-    )
+    print("Release label: " + (revision or "unavailable"))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=(
-            "Deploy, inspect, or safely roll back "
-            "Secure Auth staging."
-        )
+        description=("Deploy, inspect, or safely roll back " "Secure Auth staging.")
     )
 
     parser.add_argument(
@@ -926,8 +810,7 @@ def main() -> int:
         return 1
     except subprocess.CalledProcessError as exc:
         print(
-            f"ERROR: command failed with exit code "
-            f"{exc.returncode}",
+            f"ERROR: command failed with exit code " f"{exc.returncode}",
             file=sys.stderr,
         )
         return exc.returncode or 1

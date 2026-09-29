@@ -1,6 +1,7 @@
 """
 Token blacklist service using Redis.
 """
+
 import redis.asyncio as aioredis
 from datetime import datetime, timezone
 from typing import Optional
@@ -19,9 +20,7 @@ class TokenBlacklist:
         """Get or create Redis connection."""
         if self._redis is None:
             self._redis = aioredis.from_url(
-                settings.REDIS_URL,
-                encoding="utf-8",
-                decode_responses=True
+                settings.REDIS_URL, encoding="utf-8", decode_responses=True
             )
         return self._redis
 
@@ -32,11 +31,7 @@ class TokenBlacklist:
         ttl = exp - now
 
         if ttl > 0:
-            await r.setex(
-                name=f"{self.prefix}{jti}",
-                time=ttl,
-                value="1"
-            )
+            await r.setex(name=f"{self.prefix}{jti}", time=ttl, value="1")
 
     async def is_blacklisted(self, jti: str) -> bool:
         """Check if token JTI is blacklisted."""
