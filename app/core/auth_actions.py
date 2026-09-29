@@ -31,6 +31,10 @@ def issue_auth_action_token(
     if expires_in.total_seconds() <= 0:
         raise ValueError("Auth action token expiry must be positive")
 
+    # Serialize issuance for this user. Without this lock, concurrent
+    # resend requests could each create a valid replacement token.
+    (db.query(User).filter(User.id == user.id).with_for_update().one())
+
     now = utc_now_naive()
 
     db.query(AuthActionToken).filter(

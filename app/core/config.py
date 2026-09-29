@@ -4,7 +4,7 @@ Application configuration.
 
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import EmailStr, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_JWT_SECRET = "your-super-secret-key-change-in-production-min-32-chars"
@@ -28,6 +28,22 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "secure-auth-api"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Email verification
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+    )
+
+    # SMTP delivery. These remain optional until an SMTP provider is configured.
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = Field(default=587, ge=1, le=65535)
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: SecretStr | None = Field(default=None, repr=False)
+    SMTP_FROM_EMAIL: EmailStr | None = None
+    SMTP_STARTTLS: bool = True
+    SMTP_TIMEOUT_SECONDS: float = Field(default=10.0, gt=0, le=60)
 
     # CORS
     ALLOWED_ORIGINS: list[str] = [

@@ -10,6 +10,7 @@ from redis.exceptions import RedisError
 from app.api.routes.auth import router as auth_router
 from app.api.routes.users import router as users_router
 from app.core.config import settings
+from app.core.email_delivery import build_email_sender
 from app.core.logging_config import configure_logging
 from app.core.redis_runtime import initialize_required_redis
 from app.core.middleware import (
@@ -40,6 +41,22 @@ class FakeRedis:
         return True
 
 
+class FakeEmailSender:
+    """Capture verification tokens only inside the test process."""
+
+    def __init__(self):
+        self.verification_tokens: dict[str, str] = {}
+
+    def send_verification(
+        self,
+        *,
+        recipient: str,
+        token: str,
+        expires_hours: int,
+    ) -> None:
+        self.verification_tokens[recipient] = token
+
+
 class FakeTokenBlacklist:
     """Fake token blacklist for testing."""
 
@@ -68,7 +85,8 @@ async def lifespan(app: FastAPI):
         fake_redis = FakeRedis()
         app.state.redis = fake_redis
         app.state.token_blacklist = FakeTokenBlacklist()
-        logger.info("Testing mode: Fake Redis initialized!")
+        app.state.email_sender = FakeEmailSender()
+        logger.info("Testing mode: Fake Redis and email sender initialized!")
     else:
         logger.info("Connecting to required Redis services...")
         try:
@@ -79,6 +97,7 @@ async def lifespan(app: FastAPI):
 
         app.state.redis = redis_client
         app.state.token_blacklist = token_blacklist
+        app.state.email_sender = build_email_sender()
         logger.info("Required Redis services connected.")
 
     logger.info("Auth service ready!")
