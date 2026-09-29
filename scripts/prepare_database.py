@@ -39,6 +39,7 @@ from app.db.types import GUID
 BASE_SCHEMA_REVISION = "2b7c4e1a9d03"
 TOKEN_VERSION_REVISION = "5e3526e9e493"
 FAMILY_TRACKING_REVISION = "c4f2e8a91b7d"
+REFRESH_HASH_UNIQUE_REVISION = "8a7d3f91c2e6"
 
 APP_TABLES = {"users", "refresh_tokens"}
 VERSION_TABLE = "alembic_version"
@@ -66,6 +67,7 @@ def historical_metadata(revision: str) -> sa.MetaData:
     if revision in {
         TOKEN_VERSION_REVISION,
         FAMILY_TRACKING_REVISION,
+        REFRESH_HASH_UNIQUE_REVISION,
     }:
         user_columns.append(sa.Column("token_version", sa.Integer(), nullable=False))
 
@@ -82,7 +84,10 @@ def historical_metadata(revision: str) -> sa.MetaData:
         ),
     ]
 
-    if revision == FAMILY_TRACKING_REVISION:
+    if revision in {
+        FAMILY_TRACKING_REVISION,
+        REFRESH_HASH_UNIQUE_REVISION,
+    }:
         refresh_token_columns.extend(
             [
                 sa.Column("family_id", GUID(), nullable=False),
@@ -108,10 +113,13 @@ def historical_metadata(revision: str) -> sa.MetaData:
     sa.Index(
         "ix_refresh_tokens_token_hash",
         refresh_tokens.c.token_hash,
-        unique=False,
+        unique=revision == REFRESH_HASH_UNIQUE_REVISION,
     )
 
-    if revision == FAMILY_TRACKING_REVISION:
+    if revision in {
+        FAMILY_TRACKING_REVISION,
+        REFRESH_HASH_UNIQUE_REVISION,
+    }:
         sa.Index(
             "ix_refresh_tokens_family_id",
             refresh_tokens.c.family_id,
@@ -175,6 +183,10 @@ def main() -> int:
 
         candidates = (
             (head_revision, Base.metadata),
+            (
+                REFRESH_HASH_UNIQUE_REVISION,
+                historical_metadata(REFRESH_HASH_UNIQUE_REVISION),
+            ),
             (
                 FAMILY_TRACKING_REVISION,
                 historical_metadata(FAMILY_TRACKING_REVISION),
