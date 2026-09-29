@@ -28,9 +28,20 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     token_version: Mapped[int] = mapped_column(Integer, default=1)
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
 
-    # Relationship to refresh tokens
-    refresh_tokens = relationship("RefreshToken", back_populates="user")
+    refresh_tokens = relationship(
+        "RefreshToken",
+        back_populates="user",
+    )
+    auth_action_tokens = relationship(
+        "AuthActionToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class RefreshToken(Base):
@@ -59,3 +70,43 @@ class RefreshToken(Base):
 
     # Relationship back to user
     user = relationship("User", back_populates="refresh_tokens")
+
+
+class AuthActionToken(Base):
+    """Hashed one-time token for account security actions."""
+
+    __tablename__ = "auth_action_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        GUID(),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    purpose: Mapped[str] = mapped_column(
+        String(32),
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+    )
+
+    user = relationship(
+        "User",
+        back_populates="auth_action_tokens",
+    )

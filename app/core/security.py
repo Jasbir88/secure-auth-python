@@ -125,3 +125,13 @@ def hash_refresh_token(token: str) -> str:
 def verify_refresh_token(plain_token: str, hashed_token: str) -> bool:
     """Verify a refresh token against its stored hash."""
     return hash_refresh_token(plain_token) == hashed_token
+
+
+def create_auth_action_token() -> str:
+    """Create a cryptographically random one-time account-action token."""
+    return secrets.token_urlsafe(48)
+
+
+def hash_auth_action_token(token: str) -> str:
+    """Hash an account-action token before persistent storage."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

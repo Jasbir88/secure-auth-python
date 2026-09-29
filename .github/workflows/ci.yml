@@ -115,7 +115,7 @@ jobs:
           python -m alembic check
 
           # Simulate each legitimate historical untracked database.
-          for revision in 2b7c4e1a9d03 5e3526e9e493 c4f2e8a91b7d head; do
+          for revision in 2b7c4e1a9d03 5e3526e9e493 c4f2e8a91b7d 8a7d3f91c2e6 head; do
             python -m alembic downgrade base
             python -m alembic upgrade "$revision"
 
