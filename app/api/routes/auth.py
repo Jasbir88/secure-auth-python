@@ -16,6 +16,7 @@ from app.core.auth_actions import (
     EMAIL_VERIFICATION_PURPOSE,
     PASSWORD_RESET_PURPOSE,
     consume_auth_action_token,
+    invalidate_auth_action_tokens,
     issue_auth_action_token,
 )
 from app.core.config import settings
@@ -146,6 +147,15 @@ def verify_email(
         )
 
     user.email_verified_at = utc_now_naive()
+
+    # A newly verified email identity must not inherit recovery tokens
+    # issued for an earlier identity state.
+    invalidate_auth_action_tokens(
+        db,
+        user,
+        purpose=PASSWORD_RESET_PURPOSE,
+    )
+
     db.commit()
 
     return MessageResponse(message="Email verified successfully")
@@ -211,7 +221,9 @@ def forgot_password(
         )
     )
 
-    user = db.query(User).filter(User.email == payload.email).first()
+    # Lock the identity before checking eligibility so an email or
+    # credential change cannot race reset-token issuance.
+    user = db.query(User).filter(User.email == payload.email).with_for_update().first()
 
     if user is None or not user.is_active or user.email_verified_at is None:
         return generic

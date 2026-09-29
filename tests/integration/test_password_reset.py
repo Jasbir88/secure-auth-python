@@ -326,3 +326,58 @@ def test_expired_reset_token_is_rejected(
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Invalid or expired password reset token"}
+
+
+def test_email_verification_invalidates_stale_password_reset_token(
+    client,
+    db_session,
+):
+    from datetime import timedelta
+
+    from app.core.auth_actions import (
+        PASSWORD_RESET_PURPOSE,
+        issue_auth_action_token,
+    )
+    from app.db.models import User
+
+    email = "identity-transition-reset@example.com"
+
+    registered = client.post(
+        "/auth/register",
+        json={
+            "email": email,
+            "password": OLD_PASSWORD,
+        },
+    )
+    assert registered.status_code == 201
+
+    verification_token = app.state.email_sender.verification_tokens[email]
+
+    user = db_session.query(User).filter(User.email == email).one()
+
+    # Simulate a reset token created during a raced/stale identity state.
+    stale_reset_token = issue_auth_action_token(
+        db_session,
+        user,
+        purpose=PASSWORD_RESET_PURPOSE,
+        expires_in=timedelta(minutes=30),
+    )
+    db_session.commit()
+
+    verified = client.post(
+        "/auth/verify-email",
+        json={"token": verification_token},
+    )
+
+    assert verified.status_code == 200
+
+    stale = client.post(
+        "/auth/reset-password",
+        json={
+            "token": stale_reset_token,
+            "new_password": NEW_PASSWORD,
+        },
+    )
+
+    assert stale.status_code == 400
+    assert stale.json() == {"detail": "Invalid or expired password reset token"}
