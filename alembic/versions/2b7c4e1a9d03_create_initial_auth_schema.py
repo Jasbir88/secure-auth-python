@@ -11,7 +11,6 @@ import sqlalchemy as sa
 
 from app.db.types import GUID
 
-
 revision: str = "2b7c4e1a9d03"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None

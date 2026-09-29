@@ -1,6 +1,7 @@
 """
 Custom SQLAlchemy types for cross-database compatibility.
 """
+
 import uuid
 from sqlalchemy import String, TypeDecorator, Dialect
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -11,6 +12,7 @@ class GUID(TypeDecorator):
 
     Uses PostgreSQL's UUID type when available, otherwise uses String(36).
     """
+
     impl = String(36)
     cache_ok = True
 

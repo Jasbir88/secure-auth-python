@@ -9,7 +9,6 @@ import math
 
 from fastapi import HTTPException, Request, Response, status
 
-
 RATE_LIMIT_SCRIPT = """
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -36,9 +35,7 @@ class RateLimiter:
 
     def __init__(self, *, times: int, seconds: int):
         if times <= 0 or seconds <= 0:
-            raise ValueError(
-                "times and seconds must be positive"
-            )
+            raise ValueError("times and seconds must be positive")
 
         self.times = times
         self.seconds = seconds
@@ -75,9 +72,7 @@ class RateLimiter:
         )
 
         key = (
-            "secure-auth:rate-limit:"
-            f"{client}:{path}:"
-            f"{self.times}:{self.seconds}"
+            "secure-auth:rate-limit:" f"{client}:{path}:" f"{self.times}:{self.seconds}"
         )
 
         remaining_ms = await redis.eval(
@@ -93,21 +88,13 @@ class RateLimiter:
         if remaining_ms > 0:
             retry_after = max(
                 1,
-                math.ceil(
-                    remaining_ms / 1000
-                ),
+                math.ceil(remaining_ms / 1000),
             )
 
-            response.headers[
-                "Retry-After"
-            ] = str(retry_after)
+            response.headers["Retry-After"] = str(retry_after)
 
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Too Many Requests",
-                headers={
-                    "Retry-After": str(
-                        retry_after
-                    )
-                },
+                headers={"Retry-After": str(retry_after)},
             )

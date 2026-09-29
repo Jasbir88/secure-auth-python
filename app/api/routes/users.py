@@ -1,6 +1,7 @@
 """
 Protected user routes - require authentication.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.rate_limit import RateLimiter
 from sqlalchemy.orm import Session
@@ -13,7 +14,6 @@ from app.core.sessions import revoke_active_refresh_tokens
 from app.db.session import get_db
 from app.db.models import User
 from app.schemas.user import (
-    UserResponse,
     UserProfileResponse,
     UpdateProfileRequest,
     ChangePasswordRequest,
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.get(
     "/me",
     response_model=UserProfileResponse,
-    dependencies=[Depends(RateLimiter(times=30, seconds=60))]
+    dependencies=[Depends(RateLimiter(times=30, seconds=60))],
 )
 async def get_current_user_profile(
     current_user: User = Depends(get_current_user),
@@ -40,7 +40,7 @@ async def get_current_user_profile(
 @router.patch(
     "/me",
     response_model=UserProfileResponse,
-    dependencies=[Depends(RateLimiter(times=10, seconds=60))]
+    dependencies=[Depends(RateLimiter(times=10, seconds=60))],
 )
 async def update_profile(
     payload: UpdateProfileRequest,
@@ -67,8 +67,7 @@ async def update_profile(
 
 
 @router.post(
-    "/me/change-password",
-    dependencies=[Depends(RateLimiter(times=3, seconds=60))]
+    "/me/change-password", dependencies=[Depends(RateLimiter(times=3, seconds=60))]
 )
 async def change_password(
     payload: ChangePasswordRequest,
@@ -101,10 +100,7 @@ async def change_password(
     return {"message": "Password changed successfully"}
 
 
-@router.delete(
-    "/me",
-    dependencies=[Depends(RateLimiter(times=3, seconds=60))]
-)
+@router.delete("/me", dependencies=[Depends(RateLimiter(times=3, seconds=60))])
 async def delete_account(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

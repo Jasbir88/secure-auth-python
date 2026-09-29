@@ -11,7 +11,6 @@ import time
 
 import redis.asyncio as redis
 
-
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
 
@@ -32,11 +31,7 @@ async def dump() -> int:
             record = {
                 "key": base64.b64encode(key).decode("ascii"),
                 "dump": base64.b64encode(payload).decode("ascii"),
-                "expires_at_ms": (
-                    now_ms + pttl
-                    if pttl > 0
-                    else None
-                ),
+                "expires_at_ms": (now_ms + pttl if pttl > 0 else None),
             }
 
             print(
@@ -78,10 +73,7 @@ async def restore() -> int:
             if expires_at_ms is None:
                 ttl_ms = 0
             else:
-                ttl_ms = (
-                    int(expires_at_ms)
-                    - int(time.time() * 1000)
-                )
+                ttl_ms = int(expires_at_ms) - int(time.time() * 1000)
 
                 if ttl_ms <= 0:
                     expired += 1
@@ -99,8 +91,7 @@ async def restore() -> int:
         await client.aclose()
 
     print(
-        f"Redis records restored: {restored}; "
-        f"expired since backup: {expired}",
+        f"Redis records restored: {restored}; " f"expired since backup: {expired}",
         file=sys.stderr,
     )
 

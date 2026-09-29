@@ -16,10 +16,7 @@ def test_build_release_targets_immutable_tag(monkeypatch):
     seen = {}
 
     def fake_rendered_app_image(env):
-        return (
-            "secure-auth-staging-app:"
-            + env["RELEASE_CHANNEL"]
-        )
+        return "secure-auth-staging-app:" + env["RELEASE_CHANNEL"]
 
     def fake_compose(*args, env=None, **kwargs):
         seen["args"] = args
@@ -47,16 +44,10 @@ def test_build_release_targets_immutable_tag(monkeypatch):
         lambda _image: release_id,
     )
 
-    current, immutable, image_id = (
-        release.build_release(release_id)
-    )
+    current, immutable, image_id = release.build_release(release_id)
 
-    assert current == (
-        "secure-auth-staging-app:current"
-    )
-    assert immutable == (
-        "secure-auth-staging-app:abc123"
-    )
+    assert current == ("secure-auth-staging-app:current")
+    assert immutable == ("secure-auth-staging-app:abc123")
     assert image_id == "sha256:test-image"
 
     assert seen["args"] == (
@@ -64,14 +55,8 @@ def test_build_release_targets_immutable_tag(monkeypatch):
         "--pull",
         "app",
     )
-    assert (
-        seen["env"]["RELEASE_CHANNEL"]
-        == release_id
-    )
-    assert (
-        seen["env"]["RELEASE_ID"]
-        == release_id
-    )
+    assert seen["env"]["RELEASE_CHANNEL"] == release_id
+    assert seen["env"]["RELEASE_ID"] == release_id
 
 
 def test_database_preflight_accepts_valid_credentials(
@@ -97,11 +82,7 @@ def test_database_preflight_accepts_valid_credentials(
 
         class Result:
             returncode = 0
-            stdout = (
-                "db-container\n"
-                if "ps" in command
-                else "1\n"
-            )
+            stdout = "db-container\n" if "ps" in command else "1\n"
             stderr = ""
 
         return Result()
@@ -115,9 +96,7 @@ def test_database_preflight_accepts_valid_credentials(
     release.verify_db_credentials()
 
     assert len(calls) == 2
-    assert calls[1][1]["input_text"].endswith(
-        "test-secret\n"
-    )
+    assert calls[1][1]["input_text"].endswith("test-secret\n")
 
 
 def test_database_preflight_fails_closed(

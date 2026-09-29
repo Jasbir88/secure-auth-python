@@ -12,9 +12,7 @@ def can_attempt_login(username: str) -> bool:
     attempts = _attempts[username]
 
     # Remove expired attempts
-    _attempts[username] = [
-        ts for ts in attempts if now - ts < WINDOW_SECONDS
-    ]
+    _attempts[username] = [ts for ts in attempts if now - ts < WINDOW_SECONDS]
 
     return len(_attempts[username]) < MAX_ATTEMPTS
 

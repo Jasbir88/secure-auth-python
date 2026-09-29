@@ -1,6 +1,7 @@
 """
 User schemas for API responses.
 """
+
 from pydantic import BaseModel, ConfigDict, EmailStr
 from uuid import UUID
 from datetime import datetime
@@ -8,6 +9,7 @@ from datetime import datetime
 
 class UserResponse(BaseModel):
     """Public user information."""
+
     id: UUID
     email: EmailStr
     is_active: bool
@@ -18,6 +20,7 @@ class UserResponse(BaseModel):
 
 class UserProfileResponse(BaseModel):
     """Detailed user profile."""
+
     id: UUID
     email: EmailStr
     is_active: bool
@@ -29,10 +32,12 @@ class UserProfileResponse(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     """Request to update user profile."""
+
     email: EmailStr | None = None
 
 
 class ChangePasswordRequest(BaseModel):
     """Request to change password."""
+
     current_password: str
     new_password: str

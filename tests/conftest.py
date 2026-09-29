@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 # Now import app modules (after setting environment variables)
 from app.db.session import Base
-from app.db.models import User, RefreshToken  # Register models with Base
+from app.db.models import User, RefreshToken  # noqa: F401
 from app.main import app
 from app.deps import get_db
 
@@ -24,7 +24,9 @@ from app.deps import get_db
 def get_test_database_url():
     """Get database URL based on environment."""
     if os.getenv("USE_DOCKER_DB"):
-        return os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/test_db")
+        return os.getenv(
+            "DATABASE_URL", "postgresql://postgres:postgres@db:5432/test_db"
+        )
     return os.getenv("DATABASE_URL", "sqlite:///:memory:")
 
 
@@ -45,6 +47,7 @@ if IS_SQLITE:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
+
 else:
     engine = create_engine(TEST_DATABASE_URL)
 

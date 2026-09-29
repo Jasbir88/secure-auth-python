@@ -9,7 +9,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 revision: str = "8a7d3f91c2e6"
 down_revision: Union[str, Sequence[str], None] = "c4f2e8a91b7d"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -20,22 +19,17 @@ def upgrade() -> None:
     """Reject duplicates, then enforce unique refresh-token hashes."""
     connection = op.get_bind()
 
-    duplicate_exists = connection.execute(
-        sa.text(
-            """
+    duplicate_exists = connection.execute(sa.text("""
             SELECT 1
             FROM refresh_tokens
             GROUP BY token_hash
             HAVING COUNT(*) > 1
             LIMIT 1
-            """
-        )
-    ).scalar()
+            """)).scalar()
 
     if duplicate_exists is not None:
         raise RuntimeError(
-            "Cannot enforce unique refresh token hashes: "
-            "duplicate hashes exist."
+            "Cannot enforce unique refresh token hashes: " "duplicate hashes exist."
         )
 
     op.drop_index(

@@ -74,9 +74,7 @@ async def lifespan(app: FastAPI):
         try:
             redis_client, token_blacklist = await initialize_required_redis()
         except Exception:
-            logger.exception(
-                "Redis unavailable; refusing to start auth service."
-            )
+            logger.exception("Redis unavailable; refusing to start auth service.")
             raise
 
         app.state.redis = redis_client
@@ -86,7 +84,7 @@ async def lifespan(app: FastAPI):
     logger.info("Auth service ready!")
     yield
     logger.info("Shutting down...")
-    if hasattr(app.state, 'redis') and app.state.redis and not TESTING:
+    if hasattr(app.state, "redis") and app.state.redis and not TESTING:
         await app.state.redis.close()
 
 
@@ -117,6 +115,7 @@ Use the `Authorization: Bearer <token>` header for protected endpoints.
         "name": "MIT",
     },
 )
+
 
 @app.exception_handler(RedisError)
 async def redis_unavailable_handler(
@@ -177,6 +176,7 @@ async def readiness():
 
     try:
         from sqlalchemy import text
+
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         db_ok = True
@@ -189,7 +189,7 @@ async def readiness():
         "dependencies": {
             "database": "connected" if db_ok else "disconnected",
             "redis": "connected" if redis_ok else "disconnected",
-        }
+        },
     }
 
 

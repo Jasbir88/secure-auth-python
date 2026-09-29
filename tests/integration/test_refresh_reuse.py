@@ -16,9 +16,7 @@ def register(client, email: str):
     return response.json()
 
 
-def test_refresh_rotation_preserves_family_and_records_replacement(
-    client, db_session
-):
+def test_refresh_rotation_preserves_family_and_records_replacement(client, db_session):
     tokens = register(client, "rotation@example.com")
     original_value = tokens["refresh_token"]
 
@@ -31,18 +29,12 @@ def test_refresh_rotation_preserves_family_and_records_replacement(
 
     original = (
         db_session.query(RefreshToken)
-        .filter(
-            RefreshToken.token_hash
-            == hash_refresh_token(original_value)
-        )
+        .filter(RefreshToken.token_hash == hash_refresh_token(original_value))
         .one()
     )
     replacement = (
         db_session.query(RefreshToken)
-        .filter(
-            RefreshToken.token_hash
-            == hash_refresh_token(replacement_value)
-        )
+        .filter(RefreshToken.token_hash == hash_refresh_token(replacement_value))
         .one()
     )
 
@@ -52,9 +44,7 @@ def test_refresh_rotation_preserves_family_and_records_replacement(
     assert original.replaced_by_token_id == replacement.id
 
 
-def test_reusing_rotated_token_revokes_its_family(
-    client, db_session
-):
+def test_reusing_rotated_token_revokes_its_family(client, db_session):
     tokens = register(client, "replay@example.com")
     original_value = tokens["refresh_token"]
 
@@ -70,9 +60,7 @@ def test_reusing_rotated_token_revokes_its_family(
         json={"refresh_token": original_value},
     )
     assert replay.status_code == 401
-    assert replay.json() == {
-        "detail": "Invalid or expired refresh token"
-    }
+    assert replay.json() == {"detail": "Invalid or expired refresh token"}
 
     descendant = client.post(
         "/auth/refresh",
@@ -82,10 +70,7 @@ def test_reusing_rotated_token_revokes_its_family(
 
     original = (
         db_session.query(RefreshToken)
-        .filter(
-            RefreshToken.token_hash
-            == hash_refresh_token(original_value)
-        )
+        .filter(RefreshToken.token_hash == hash_refresh_token(original_value))
         .one()
     )
 
@@ -99,9 +84,7 @@ def test_reusing_rotated_token_revokes_its_family(
     assert all(token.revoked for token in family)
 
 
-def test_reuse_does_not_revoke_an_unrelated_session_family(
-    client, db_session
-):
+def test_reuse_does_not_revoke_an_unrelated_session_family(client, db_session):
     first_session = register(client, "separate-family@example.com")
 
     second_login = client.post(

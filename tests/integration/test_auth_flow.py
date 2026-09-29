@@ -1,7 +1,6 @@
 """
 Integration tests for complete auth flow.
 """
-import pytest
 
 from app.db.models import User
 
@@ -12,10 +11,13 @@ class TestAuthFlow:
     def test_register_login_logout_flow(self, client, db_session):
         """Test complete user journey."""
         # Register
-        response = client.post("/auth/register", json={
-            "email": "newuser@example.com",
-            "password": "SecurePass123!",
-        })
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": "newuser@example.com",
+                "password": "SecurePass123!",
+            },
+        )
         assert response.status_code == 201
         tokens = response.json()
         assert "access_token" in tokens
@@ -23,23 +25,20 @@ class TestAuthFlow:
 
         # Access protected route
         response = client.get(
-            "/users/me",
-            headers={"Authorization": f"Bearer {tokens['access_token']}"}
+            "/users/me", headers={"Authorization": f"Bearer {tokens['access_token']}"}
         )
         assert response.status_code == 200
         assert response.json()["email"] == "newuser@example.com"
 
         # Refresh token
-        response = client.post("/auth/refresh", json={
-            "refresh_token": tokens["refresh_token"]
-        })
+        response = client.post(
+            "/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+        )
         assert response.status_code == 200
         new_tokens = response.json()
         assert new_tokens["access_token"] != tokens["access_token"]
 
-    def test_weak_registration_rejected_and_not_stored(
-        self, client, db_session
-    ):
+    def test_weak_registration_rejected_and_not_stored(self, client, db_session):
         """Weak registration passwords fail before user creation."""
         email = "weak-password@example.com"
         password = "short"
@@ -61,10 +60,13 @@ class TestAuthFlow:
 
     def test_invalid_login(self, client, db_session):
         """Test login with wrong credentials."""
-        response = client.post("/auth/login", json={
-            "email": "nonexistent@example.com",
-            "password": "WrongPass123!",
-        })
+        response = client.post(
+            "/auth/login",
+            json={
+                "email": "nonexistent@example.com",
+                "password": "WrongPass123!",
+            },
+        )
         assert response.status_code == 401
 
     def test_duplicate_registration(self, client, db_session):

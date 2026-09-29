@@ -11,6 +11,8 @@ revision. Unknown or partial schemas fail closed and are never stamped.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import sys
 from pathlib import Path
 
@@ -33,7 +35,6 @@ from app.core.config import settings
 from app.db import models  # noqa: F401
 from app.db.session import Base, engine
 from app.db.types import GUID
-
 
 BASE_SCHEMA_REVISION = "2b7c4e1a9d03"
 TOKEN_VERSION_REVISION = "5e3526e9e493"
@@ -66,9 +67,7 @@ def historical_metadata(revision: str) -> sa.MetaData:
         TOKEN_VERSION_REVISION,
         FAMILY_TRACKING_REVISION,
     }:
-        user_columns.append(
-            sa.Column("token_version", sa.Integer(), nullable=False)
-        )
+        user_columns.append(sa.Column("token_version", sa.Integer(), nullable=False))
 
     users = sa.Table("users", metadata, *user_columns)
     sa.Index("ix_users_email", users.c.email, unique=True)
@@ -127,9 +126,7 @@ def current_head_revision(config: Config) -> str:
     heads = ScriptDirectory.from_config(config).get_heads()
 
     if len(heads) != 1:
-        raise RuntimeError(
-            "Database preparation requires exactly one Alembic head."
-        )
+        raise RuntimeError("Database preparation requires exactly one Alembic head.")
 
     return heads[0]
 
@@ -221,8 +218,7 @@ def main() -> int:
 
     except Exception as exc:
         print(
-            "ERROR: database preparation failed "
-            f"({type(exc).__name__}).",
+            "ERROR: database preparation failed " f"({type(exc).__name__}).",
             file=sys.stderr,
         )
         return 1

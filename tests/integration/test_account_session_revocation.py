@@ -3,7 +3,6 @@
 from app.core.security import hash_refresh_token
 from app.db.models import RefreshToken, User
 
-
 PASSWORD = "SecurePass123!"
 NEW_PASSWORD = "StrongerPass456!"
 
@@ -117,9 +116,7 @@ def test_password_change_invalidates_all_existing_sessions(client, db_session):
     assert new_login.status_code == 200
 
     user = (
-        db_session.query(User)
-        .filter(User.email == "password-change@example.com")
-        .one()
+        db_session.query(User).filter(User.email == "password-change@example.com").one()
     )
     active_refresh_tokens = (
         db_session.query(RefreshToken)
@@ -171,9 +168,7 @@ def test_inactive_user_fails_closed_even_without_token_version_change(
     tokens = register(client, "inactive-state@example.com")
 
     user = (
-        db_session.query(User)
-        .filter(User.email == "inactive-state@example.com")
-        .one()
+        db_session.query(User).filter(User.email == "inactive-state@example.com").one()
     )
 
     original_token_version = user.token_version
@@ -197,10 +192,7 @@ def test_inactive_user_fails_closed_even_without_token_version_change(
 
     stored_refresh = (
         db_session.query(RefreshToken)
-        .filter(
-            RefreshToken.token_hash
-            == hash_refresh_token(tokens["refresh_token"])
-        )
+        .filter(RefreshToken.token_hash == hash_refresh_token(tokens["refresh_token"]))
         .one()
     )
     assert stored_refresh.revoked is True
