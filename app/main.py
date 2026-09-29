@@ -42,10 +42,11 @@ class FakeRedis:
 
 
 class FakeEmailSender:
-    """Capture verification tokens only inside the test process."""
+    """Capture authentication email tokens only inside the test process."""
 
     def __init__(self):
         self.verification_tokens: dict[str, str] = {}
+        self.password_reset_tokens: dict[str, str] = {}
 
     def send_verification(
         self,
@@ -55,6 +56,15 @@ class FakeEmailSender:
         expires_hours: int,
     ) -> None:
         self.verification_tokens[recipient] = token
+
+    def send_password_reset(
+        self,
+        *,
+        recipient: str,
+        token: str,
+        expires_minutes: int,
+    ) -> None:
+        self.password_reset_tokens[recipient] = token
 
 
 class FakeTokenBlacklist:

@@ -14,6 +14,7 @@ from auth.validator import is_valid_password
 
 from app.core.auth_actions import (
     EMAIL_VERIFICATION_PURPOSE,
+    PASSWORD_RESET_PURPOSE,
     consume_auth_action_token,
     issue_auth_action_token,
 )
@@ -33,11 +34,13 @@ from app.core.security import (
 from app.db.models import RefreshToken, User, utc_now_naive
 from app.db.session import get_db
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenResponse,
     VerifyEmailRequest,
 )
@@ -189,6 +192,103 @@ def resend_verification(
         pass
 
     return generic
+
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    dependencies=[Depends(RateLimiter(times=3, seconds=60))],
+)
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Issue password-reset recovery without revealing account existence."""
+    generic = MessageResponse(
+        message=(
+            "If an eligible account exists, " "a password reset email has been sent."
+        )
+    )
+
+    user = db.query(User).filter(User.email == payload.email).first()
+
+    if user is None or not user.is_active or user.email_verified_at is None:
+        return generic
+
+    raw_token = issue_auth_action_token(
+        db,
+        user,
+        purpose=PASSWORD_RESET_PURPOSE,
+        expires_in=timedelta(
+            minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
+        ),
+    )
+
+    # Persist before SMTP. If delivery fails, a later request replaces
+    # this undelivered token without exposing account state.
+    db.commit()
+
+    try:
+        request.app.state.email_sender.send_password_reset(
+            recipient=user.email,
+            token=raw_token,
+            expires_minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
+        )
+    except EmailDeliveryError:
+        pass
+
+    return generic
+
+
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+    dependencies=[Depends(RateLimiter(times=5, seconds=60))],
+)
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Reset a password using a valid one-time recovery token."""
+    # Check policy before consuming the token. A weak-password mistake
+    # must not destroy an otherwise valid recovery token.
+    if not is_valid_password(payload.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid password data",
+        )
+
+    token = consume_auth_action_token(
+        db,
+        payload.token,
+        purpose=PASSWORD_RESET_PURPOSE,
+    )
+
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset token",
+        )
+
+    user = db.query(User).filter(User.id == token.user_id).with_for_update().first()
+
+    if user is None or not user.is_active or user.email_verified_at is None:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset token",
+        )
+
+    user.password_hash = hash_user_password(payload.new_password)
+
+    # Kill all sessions created with the old credential.
+    user.token_version += 1
+    revoke_active_refresh_tokens(db, user.id)
+
+    db.commit()
+
+    return MessageResponse(message="Password reset successfully")
 
 
 @router.post(
