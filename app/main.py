@@ -5,7 +5,6 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi_limiter import FastAPILimiter
 from redis.exceptions import RedisError
 
 from app.api.routes.auth import router as auth_router
@@ -31,11 +30,8 @@ TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
 class FakeRedis:
     """Fake Redis client for testing without a real Redis server."""
 
-    async def evalsha(self, *args, **kwargs):
+    async def eval(self, *args, **kwargs):
         return 0
-
-    async def script_load(self, script):
-        return "fake_sha_hash"
 
     async def close(self):
         pass
@@ -70,7 +66,6 @@ async def lifespan(app: FastAPI):
     if TESTING:
         logger.info("Testing mode: Using fake Redis...")
         fake_redis = FakeRedis()
-        await FastAPILimiter.init(fake_redis)
         app.state.redis = fake_redis
         app.state.token_blacklist = FakeTokenBlacklist()
         logger.info("Testing mode: Fake Redis initialized!")
@@ -91,7 +86,6 @@ async def lifespan(app: FastAPI):
     logger.info("Auth service ready!")
     yield
     logger.info("Shutting down...")
-    await FastAPILimiter.close()
     if hasattr(app.state, 'redis') and app.state.redis and not TESTING:
         await app.state.redis.close()
 

@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi_limiter import FastAPILimiter
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.core.redis_runtime import initialize_required_redis
@@ -124,14 +123,14 @@ def test_logout_reports_blacklist_write_failure_and_can_retry(client):
 
 
 def test_rate_limiter_redis_failure_returns_503(client):
-    original_redis = FastAPILimiter.redis
+    original_redis = app.state.redis
 
     broken_redis = AsyncMock()
-    broken_redis.evalsha.side_effect = RedisConnectionError(
+    broken_redis.eval.side_effect = RedisConnectionError(
         "Redis unavailable"
     )
 
-    FastAPILimiter.redis = broken_redis
+    app.state.redis = broken_redis
 
     try:
         response = client.post(
@@ -142,7 +141,7 @@ def test_rate_limiter_redis_failure_returns_503(client):
             },
         )
     finally:
-        FastAPILimiter.redis = original_redis
+        app.state.redis = original_redis
 
     assert response.status_code == 503
     assert response.json() == {
