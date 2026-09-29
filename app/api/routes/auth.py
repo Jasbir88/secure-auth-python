@@ -12,8 +12,14 @@ from sqlalchemy.orm import Session
 
 from auth.validator import is_valid_password
 
+from app.core.auth_actions import (
+    EMAIL_VERIFICATION_PURPOSE,
+    consume_auth_action_token,
+    issue_auth_action_token,
+)
 from app.core.config import settings
 from app.core.dependencies import get_current_user
+from app.core.email_delivery import EmailDeliveryError
 from app.core.sessions import revoke_active_refresh_tokens
 from app.core.security import (
     DUMMY_PASSWORD_HASH,
@@ -24,13 +30,16 @@ from app.core.security import (
     hash_user_password,
     verify_user_password,
 )
-from app.db.models import RefreshToken, User
+from app.db.models import RefreshToken, User, utc_now_naive
 from app.db.session import get_db
 from app.schemas.auth import (
     LoginRequest,
+    MessageResponse,
     RefreshRequest,
     RegisterRequest,
+    ResendVerificationRequest,
     TokenResponse,
+    VerifyEmailRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -39,12 +48,16 @@ security = HTTPBearer()
 
 @router.post(
     "/register",
-    response_model=TokenResponse,
+    response_model=MessageResponse,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(RateLimiter(times=5, seconds=60))],
 )
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    """Register a new user."""
+def register(
+    request: Request,
+    payload: RegisterRequest,
+    db: Session = Depends(get_db),
+):
+    """Register an unverified user and send a verification token."""
     if not is_valid_password(payload.password):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -61,28 +74,121 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     user = User(
         email=payload.email,
         password_hash=hash_user_password(payload.password),
+        email_verified_at=None,
     )
     db.add(user)
+    db.flush()
+
+    raw_token = issue_auth_action_token(
+        db,
+        user,
+        purpose=EMAIL_VERIFICATION_PURPOSE,
+        expires_in=timedelta(
+            hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS,
+        ),
+    )
+
+    # Commit before the external SMTP side effect. If delivery fails, the
+    # account remains safely unverified and /resend-verification can recover.
     db.commit()
-    db.refresh(user)
 
-    access_token = create_access_token(str(user.id), user.token_version)
-    refresh_token_value = create_refresh_token()
+    email_sender = request.app.state.email_sender
 
-    db.add(
-        RefreshToken(
-            user_id=user.id,
-            token_hash=hash_refresh_token(refresh_token_value),
-            expires_at=datetime.now(timezone.utc)
-            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+    try:
+        email_sender.send_verification(
+            recipient=user.email,
+            token=raw_token,
+            expires_hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS,
         )
+    except EmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email could not be delivered",
+        ) from exc
+
+    return MessageResponse(
+        message="Registration successful. Check your email to verify your account."
+    )
+
+
+@router.post(
+    "/verify-email",
+    response_model=MessageResponse,
+    dependencies=[Depends(RateLimiter(times=10, seconds=60))],
+)
+def verify_email(
+    payload: VerifyEmailRequest,
+    db: Session = Depends(get_db),
+):
+    """Verify an email address with a one-time token."""
+    token = consume_auth_action_token(
+        db,
+        payload.token,
+        purpose=EMAIL_VERIFICATION_PURPOSE,
+    )
+
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    user = db.query(User).filter(User.id == token.user_id).with_for_update().first()
+
+    if user is None or not user.is_active:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    user.email_verified_at = utc_now_naive()
+    db.commit()
+
+    return MessageResponse(message="Email verified successfully")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    dependencies=[Depends(RateLimiter(times=3, seconds=60))],
+)
+def resend_verification(
+    request: Request,
+    payload: ResendVerificationRequest,
+    db: Session = Depends(get_db),
+):
+    """Resend verification without revealing account existence."""
+    generic = MessageResponse(
+        message=("If an eligible account exists, a verification email has been sent.")
+    )
+
+    user = db.query(User).filter(User.email == payload.email).first()
+
+    if user is None or not user.is_active or user.email_verified_at is not None:
+        return generic
+
+    raw_token = issue_auth_action_token(
+        db,
+        user,
+        purpose=EMAIL_VERIFICATION_PURPOSE,
+        expires_in=timedelta(
+            hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS,
+        ),
     )
     db.commit()
 
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token_value,
-    )
+    try:
+        request.app.state.email_sender.send_verification(
+            recipient=user.email,
+            token=raw_token,
+            expires_hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS,
+        )
+    except EmailDeliveryError:
+        # Preserve the same outward response to avoid account enumeration.
+        pass
+
+    return generic
 
 
 @router.post(
@@ -106,6 +212,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated",
+        )
+
+    if user.email_verified_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required",
         )
 
     access_token = create_access_token(str(user.id), user.token_version)
@@ -179,7 +291,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         )
 
     user = db.query(User).filter(User.id == token.user_id).first()
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.email_verified_at is None:
         if user is not None:
             revoke_active_refresh_tokens(db, user.id)
             db.commit()

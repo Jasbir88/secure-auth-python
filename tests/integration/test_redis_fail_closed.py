@@ -8,6 +8,8 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from app.core.redis_runtime import initialize_required_redis
 from app.main import app
 
+from tests.auth_helpers import register_verified_user
+
 PASSWORD = "SecurePass123!"
 
 
@@ -31,12 +33,11 @@ class WorkingBlacklist:
 
 
 def register(client, email: str):
-    response = client.post(
-        "/auth/register",
-        json={"email": email, "password": PASSWORD},
+    return register_verified_user(
+        client,
+        email,
+        PASSWORD,
     )
-    assert response.status_code == 201
-    return response.json()
 
 
 @pytest.mark.asyncio

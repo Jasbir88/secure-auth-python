@@ -78,6 +78,26 @@ def consume_auth_action_token(
 
     token_hash = hash_auth_action_token(raw_token)
 
+    # Discover the owning user without taking a token-row lock first.
+    # Issuance locks User -> AuthActionToken, so consumption follows the
+    # same order to avoid resend/verification deadlocks on PostgreSQL.
+    user_id = (
+        db.query(AuthActionToken.user_id)
+        .filter(
+            AuthActionToken.token_hash == token_hash,
+            AuthActionToken.purpose == purpose,
+        )
+        .scalar()
+    )
+
+    if user_id is None:
+        return None
+
+    user = db.query(User).filter(User.id == user_id).with_for_update().first()
+
+    if user is None:
+        return None
+
     token = (
         db.query(AuthActionToken)
         .filter(

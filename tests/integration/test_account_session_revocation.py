@@ -3,17 +3,18 @@
 from app.core.security import hash_refresh_token
 from app.db.models import RefreshToken, User
 
+from tests.auth_helpers import register_verified_user
+
 PASSWORD = "SecurePass123!"
 NEW_PASSWORD = "StrongerPass456!"
 
 
 def register(client, email: str):
-    response = client.post(
-        "/auth/register",
-        json={"email": email, "password": PASSWORD},
+    return register_verified_user(
+        client,
+        email,
+        PASSWORD,
     )
-    assert response.status_code == 201
-    return response.json()
 
 
 def headers(access_token: str):

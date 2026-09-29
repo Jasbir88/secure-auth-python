@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from tests.auth_helpers import register_and_verify
+
 
 class MockTokenBlacklist:
     """Mock token blacklist for testing without Redis."""
@@ -39,19 +41,11 @@ class TestLogoutAll:
     @pytest.fixture
     def registered_user(self, client, db_session):
         """Create a test user."""
-        response = client.post(
-            "/auth/register",
-            json={
-                "email": "test@example.com",
-                "password": "SecurePass123!",
-            },
+        register_and_verify(
+            client,
+            "test@example.com",
+            "SecurePass123!",
         )
-        # Accept 200, 201, or 409 (if user already exists)
-        assert response.status_code in [
-            200,
-            201,
-            409,
-        ], f"Register failed: {response.json()}"
         return {"email": "test@example.com", "password": "SecurePass123!"}
 
     @pytest.fixture

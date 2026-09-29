@@ -82,6 +82,12 @@ async def get_current_user(
     if user.token_version != token_version:
         raise revoked_exception
 
+    if user.email_verified_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required",
+        )
+
     return user
 
 
