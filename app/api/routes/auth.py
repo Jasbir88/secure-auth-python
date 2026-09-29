@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi_limiter.depends import RateLimiter
+from app.core.rate_limit import RateLimiter
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 

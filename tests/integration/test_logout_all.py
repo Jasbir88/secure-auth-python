@@ -2,7 +2,7 @@
 Integration tests for logout all sessions functionality.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -29,7 +29,11 @@ class TestLogoutAll:
         from app.main import app
 
         app.state.token_blacklist = MockTokenBlacklist()
-        app.state.redis = MagicMock()  # Mock redis client
+
+        redis = AsyncMock()
+        redis.eval.return_value = 0
+        app.state.redis = redis
+
         yield
 
     @pytest.fixture

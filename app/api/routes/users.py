@@ -2,7 +2,7 @@
 Protected user routes - require authentication.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi_limiter.depends import RateLimiter
+from app.core.rate_limit import RateLimiter
 from sqlalchemy.orm import Session
 
 from auth.validator import is_valid_password
